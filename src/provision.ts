@@ -51,7 +51,7 @@ export async function provisionRepo(db: D1Database, art: Artifacts, input: Provi
   const invalid = checkInput(input);
   if (invalid) return invalid;
   const existing = await findRepoByName(db, input.name);
-  if (existing && existing.provisioned_at !== null) {
+  if (existing && (existing.provisioned_at !== null || existing.deleted_at !== null)) {
     return existing.deleted_at !== null
       ? { ok: false, error: `A deleted repo named "${input.name}" exists. Restore it instead.`, restoreId: existing.id }
       : { ok: false, error: `A repo named "${input.name}" already exists.` };

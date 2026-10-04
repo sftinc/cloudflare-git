@@ -53,6 +53,17 @@ describe("provisionRepo", () => {
     expect((await provisionRepo(env.DB, art(f), create("admin"), 5)).ok).toBe(false);
   });
 
+  it("rejects a name whose deleted row was never provisioned", async () => {
+    const f = new FakeArtifacts();
+    f.failNext = { method: "create", code: "INTERNAL_ERROR" };
+    await provisionRepo(env.DB, art(f), create("p7"), 1);
+    const row = (await repos.findRepoByName(env.DB, "p7"))!;
+    await repos.setDeleted(env.DB, row.id, true, 2);
+    const r = await provisionRepo(env.DB, art(f), create("p7"), 3);
+    expect(!r.ok && r.restoreId).toBe(row.id);
+    expect(f.repos.has("p7")).toBe(false);
+  });
+
   it("refuses import URLs with credentials and clears them", async () => {
     const r = await provisionRepo(env.DB, art(new FakeArtifacts()), { kind: "import", name: "p5", description: "", url: "https://user:tok@github.com/a/b", branch: "" }, 1);
     expect(!r.ok && r.clearUrl).toBe(true);
