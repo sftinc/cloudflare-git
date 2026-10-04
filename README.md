@@ -86,14 +86,18 @@ invite instead (below).
 **Public repos: Import.** In `/admin`, "Import from a public URL". It copies the source's default
 branch (or the one branch you name) and **no tags** — that's how Artifacts import works.
 
-**Private repos, or every branch and tag: push a mirror.** Create an empty repo in `/admin` with
+**Private repos, or every branch and tag: push them all.** Create an empty repo in `/admin` with
 the same default branch as the source, then:
 
 ```sh
 git clone --mirror https://github.com/you/project.git
 cd project.git
-git push --mirror https://git.example.com/project.git
+git push https://git.example.com/project.git --all
+git push https://git.example.com/project.git --tags
 ```
+
+Don't use `git push --mirror`: a GitHub mirror also holds `refs/pull/*`, and Artifacts applies a
+push atomically, so one rejected ref fails the whole push.
 
 If the repo is over 100 MB, push to the "Direct push URL" from the repo's admin page instead
 (valid for one hour; webhooks don't fire for direct pushes).
@@ -110,7 +114,8 @@ git push -u origin main
 The first push asks for a username and password: any username, the token as the password. On a
 Mac the keychain remembers it.
 
-In CI, store the token as `GIT_PUSH_TOKEN` and use a credential helper:
+In CI, store the token as `GIT_PUSH_TOKEN` and use a credential helper. This sets it globally,
+so use it **for CI runners only**, never on your own machine:
 
 ```sh
 git config --global credential.helper '!f() { echo username=x; echo password=$GIT_PUSH_TOKEN; }; f'
@@ -149,8 +154,9 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import http from "node:http";
 
 http.createServer((req, res) => {
-  let body = "";
-  req.on("data", (d) => (body += d)).on("end", () => {
+  const chunks = [];
+  req.on("data", (c) => chunks.push(c)).on("end", () => {
+    const body = Buffer.concat(chunks); // HMAC the raw bytes, before any parsing
     const want = Buffer.from("sha256=" + createHmac("sha256", process.env.WEBHOOK_SECRET).update(body).digest("hex"));
     const got = Buffer.from(req.headers["x-signature-256"] ?? "");
     res.statusCode = got.length === want.length && timingSafeEqual(got, want) ? 204 : 401;
