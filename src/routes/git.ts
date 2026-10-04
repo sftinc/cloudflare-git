@@ -14,7 +14,7 @@ const FORWARD = ["content-type", "accept", "git-protocol", "content-encoding", "
 
 export const gitRoutes = new Hono<AppEnv>();
 
-gitRoutes.get(`${REPO}/info/refs`, (c) => {
+gitRoutes.get(`${REPO}/info/refs`, async (c) => {
   const service = c.req.query("service");
   if (service !== "git-upload-pack" && service !== "git-receive-pack") return c.text("Not found", 404);
   return proxy(c, service, `info/refs?service=${service}`);
