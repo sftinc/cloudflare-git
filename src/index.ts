@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { inviteRoutes } from "./routes/invite";
 import { gitRoutes } from "./routes/git";
 import { publicRoutes } from "./routes/public";
 import { handleError, notFoundPage } from "./routes/errors";
@@ -21,7 +22,7 @@ app.use("*", async (c, next) => {
 
 app.route("/", gitRoutes);
 // Task 11: app.route("/admin", adminRoutes);
-// Task 10: app.route("/invite", inviteRoutes);
+app.route("/invite", inviteRoutes);
 app.route("/", publicRoutes);
 app.notFound(notFoundPage);
 app.onError(handleError);

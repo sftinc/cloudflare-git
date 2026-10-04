@@ -130,3 +130,5 @@ fieldset label { display: flex !important; align-items: center; gap: 8px; font-w
 .hljs-title, .hljs-section, .hljs-name { color: var(--hl-title); }
 .hljs-attr, .hljs-attribute, .hljs-variable, .hljs-property { color: var(--hl-attr); }
 .hljs-deletion { color: #b3261e; }
+.invite ul { margin: 8px 0 16px; }
+.invite .secret div { display: grid; gap: 6px; margin-top: 12px; }
