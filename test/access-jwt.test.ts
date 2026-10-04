@@ -4,7 +4,7 @@ import { ownerClaims, signJwt, testKey } from "./helpers/jwt";
 import { stubFetch } from "./helpers/git-http";
 
 const NOW = 1_760_000_000_000;
-const base = { ACCESS_TEAM_DOMAIN: "test.cloudflareaccess.com", ACCESS_AUD: "test-aud", OWNER_EMAIL: "Owner@Example.com" };
+const base = { ACCESS_TEAM_DOMAIN: "test.cloudflareaccess.com", ACCESS_AUD: "test-aud" };
 
 async function envWith(...kids: string[]) {
   const keys = await Promise.all(kids.map(async (k) => (await testKey(k)).jwk));
@@ -15,7 +15,7 @@ beforeEach(() => resetAccessKeys());
 afterEach(() => vi.restoreAllMocks());
 
 describe("verifyAccessJwt", () => {
-  it("accepts a valid owner token (email compared case-insensitively)", async () => {
+  it("accepts a valid token", async () => {
     const t = await signJwt(await testKey(), ownerClaims(NOW));
     expect(await verifyAccessJwt(t, await envWith("k1"), NOW)).toBe(true);
   });
@@ -26,11 +26,15 @@ describe("verifyAccessJwt", () => {
     ["issued in the future", { iat: NOW / 1000 + 120 }],
     ["wrong issuer", { iss: "https://evil.cloudflareaccess.com" }],
     ["wrong audience", { aud: ["other"] }],
-    ["wrong email", { email: "someone@example.com" }],
     ["missing exp", { exp: undefined }],
   ])("rejects %s", async (_n, patch) => {
     const t = await signJwt(await testKey(), { ...ownerClaims(NOW), ...patch });
     expect(await verifyAccessJwt(t, await envWith("k1"), NOW)).toBe(false);
+  });
+
+  it("accepts a valid token with any email", async () => {
+    const t = await signJwt(await testKey(), { ...ownerClaims(NOW), email: "someone@else.example" });
+    expect(await verifyAccessJwt(t, await envWith("k1"), NOW)).toBe(true);
   });
 
   it("allows 60s clock skew", async () => {

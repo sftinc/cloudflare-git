@@ -35,7 +35,7 @@ namespace `cloudflare-git-dev` in your account (run `npx wrangler login` first).
 `/admin` checks a Cloudflare Access JWT on every request. Locally there is no Access, so put a
 JWKS in `ACCESS_JWKS` in `.dev.vars` and send a JWT signed with that key in the
 `Cf-Access-Jwt-Assertion` header (issuer `https://dev.cloudflareaccess.com`, audience `dev-aud`,
-email `owner@example.com`, matching `wrangler.jsonc`). `scripts/e2e.mjs` shows how to make the
+matching `wrangler.jsonc`). `scripts/e2e.mjs` shows how to make the
 key pair and mint the token.
 
 ## Tests
@@ -59,8 +59,11 @@ headless Chrome (`.e2e/screenshots/`), and deletes its repos at the end. It neve
    ```sh
    npx wrangler d1 create cloudflare-git
    ```
-2. In `env.production` set `OWNER_EMAIL`, `SITE_ORIGIN` (e.g. `https://git.example.com`), and the
+2. In `env.production` set `SITE_ORIGIN` (e.g. `https://git.example.com`), and the
    custom domain in `routes`. `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` come from the next section.
+   `env.production` also sets `workers_dev: false` and `preview_urls: false`, so the Worker answers
+   only on the custom domain. Access guards only `git.example.com/admin`; the `workers.dev` and
+   preview URLs would be unguarded paths to the same Worker (it still verifies the JWT regardless).
 3. Apply migrations, set the cookie secret, deploy:
    ```sh
    npx wrangler d1 migrations apply DB --remote --env production
@@ -71,7 +74,8 @@ headless Chrome (`.e2e/screenshots/`), and deletes its repos at the end. It neve
 ### Cloudflare Access
 
 In Zero Trust, create a **self-hosted application** for `git.example.com/admin` with a policy
-that allows only your email. Copy the application's **AUD tag** into `ACCESS_AUD` and your team
+that allows only your own email (or a group of admins), never "everyone". The policy is the only
+gate: the Worker verifies the JWT's signature, issuer, audience and expiry, but not who the user is. Copy the application's **AUD tag** into `ACCESS_AUD` and your team
 domain (`<team>.cloudflareaccess.com`) into `ACCESS_TEAM_DOMAIN`, then deploy again.
 
 The Worker verifies the Access JWT itself; it does not trust the edge alone. On public pages it

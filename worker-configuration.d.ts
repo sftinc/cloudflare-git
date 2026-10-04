@@ -4,7 +4,6 @@
 interface __BaseEnv_Env {
 	DB: D1Database;
 	ARTIFACTS: Artifacts;
-	OWNER_EMAIL: string;
 	ACCESS_TEAM_DOMAIN: string;
 	ACCESS_AUD: string;
 	SITE_ORIGIN: string;
@@ -17,7 +16,6 @@ declare namespace Cloudflare {
 	interface ProductionEnv {
 		DB: D1Database;
 		ARTIFACTS: Artifacts;
-		OWNER_EMAIL: string;
 		ACCESS_TEAM_DOMAIN: string;
 		ACCESS_AUD: string;
 		SITE_ORIGIN: string;
@@ -30,7 +28,6 @@ type StringifyValues<EnvType extends Record<string, unknown>> = {
 	[Binding in keyof EnvType]: EnvType[Binding] extends string ? EnvType[Binding] : string;
 };
 declare namespace NodeJS {
-	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "OWNER_EMAIL" | "ACCESS_TEAM_DOMAIN" | "ACCESS_AUD" | "SITE_ORIGIN" | "COOKIE_SECRET">> {}
 }
 
 // Begin runtime types

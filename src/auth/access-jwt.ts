@@ -1,6 +1,6 @@
 import { base64urlDecode } from "../lib/crypto";
 
-export type AccessEnv = { ACCESS_TEAM_DOMAIN: string; ACCESS_AUD: string; OWNER_EMAIL: string; ACCESS_JWKS?: string };
+export type AccessEnv = { ACCESS_TEAM_DOMAIN: string; ACCESS_AUD: string; ACCESS_JWKS?: string };
 
 const SKEW_S = 60;
 const RELOAD_MIN_MS = 60_000;
@@ -47,7 +47,7 @@ function decodeJson(part: string): Record<string, unknown> | null {
   }
 }
 
-/** True only for a validly signed, current Access JWT for OWNER_EMAIL. */
+/** True only for a validly signed, current Access JWT for this app's issuer and audience. The email is not checked: the Access policy decides who is admin. */
 export async function verifyAccessJwt(token: string, env: AccessEnv, now: number = Date.now()): Promise<boolean> {
   const parts = token.split(".");
   if (parts.length !== 3) return false;
@@ -77,5 +77,5 @@ export async function verifyAccessJwt(token: string, env: AccessEnv, now: number
   if (typeof claims.exp !== "number" || claims.exp + SKEW_S < t) return false;
   if (typeof claims.nbf === "number" && claims.nbf - SKEW_S > t) return false;
   if (typeof claims.iat === "number" && claims.iat - SKEW_S > t) return false;
-  return typeof claims.email === "string" && claims.email.toLowerCase() === env.OWNER_EMAIL.toLowerCase();
+  return true;
 }

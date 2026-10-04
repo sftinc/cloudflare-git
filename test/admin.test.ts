@@ -38,7 +38,7 @@ describe("admin auth", () => {
   it("is 404 without a valid Access JWT", async () => {
     const { res } = await request("/admin", {}, await ownerEnv({ ARTIFACTS: fake }));
     expect(res.status).toBe(404);
-    const bad = await request("/admin", { headers: { "cf-access-jwt-assertion": await ownerToken({ email: "x@y.z" }) } }, await ownerEnv({ ARTIFACTS: fake }));
+    const bad = await request("/admin", { headers: { "cf-access-jwt-assertion": await ownerToken({ aud: ["other"] }) } }, await ownerEnv({ ARTIFACTS: fake }));
     expect(bad.res.status).toBe(404);
   });
   it("404 pages never show the admin nav", async () => {
