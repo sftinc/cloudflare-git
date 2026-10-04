@@ -103,7 +103,7 @@ publicRoutes.get(`/:repo{${NAME}}/blob/*`, async (c) => {
     const headers: Record<string, string> = { "Content-Security-Policy": "default-src 'none'; sandbox" };
     if (binary) {
       headers["Content-Type"] = "application/octet-stream";
-      headers["Content-Disposition"] = `attachment; filename="${filename.replace(/["\\\r\n]/g, "_")}"`;
+      headers["Content-Disposition"] = `attachment; filename="${filename.replace(/[^\x20-\x7e]|["\\]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
     } else headers["Content-Type"] = "text/plain; charset=utf-8";
     return new Response(blob.stream(), { headers });
   }

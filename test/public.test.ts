@@ -32,6 +32,7 @@ beforeEach(async () => {
           "docs/guide.md": "## Guide\n\n![Diagram](img/d.png)",
           "docs/my file #1.txt": "spaces",
           "data.bin": new Uint8Array([0, 1, 2, 3]),
+          "✓ data.bin": new Uint8Array([0, 1, 2, 3]),
           "big.txt": big,
         },
         commits: Array.from({ length: 35 }, (_, i) => ({ message: `Commit ${35 - i}\n\nbody` })),
@@ -125,8 +126,14 @@ describe("files", () => {
   it("binary files download and are not shown inline", async () => {
     const raw = await html("/site/blob/main/data.bin?raw=1");
     expect(raw.headers.get("content-type")).toBe("application/octet-stream");
-    expect(raw.headers.get("content-disposition")).toBe('attachment; filename="data.bin"');
+    expect(raw.headers.get("content-disposition")).toBe("attachment; filename=\"data.bin\"; filename*=UTF-8''data.bin");
     expect((await html("/site/blob/main/data.bin")).body).toContain("Binary file not shown");
+  });
+  it("binary downloads with non-ASCII names do not crash", async () => {
+    const r = await html("/site/blob/main/%E2%9C%93%20data.bin?raw=1");
+    expect(r.status).toBe(200);
+    expect(r.headers.get("content-type")).toBe("application/octet-stream");
+    expect(r.headers.get("content-disposition")).toContain("filename*=UTF-8''%E2%9C%93%20data.bin");
   });
   it("files Artifacts cannot read show a too-large page", async () => {
     fake.failNext = { method: "readFile", code: "INTERNAL_ERROR" };
