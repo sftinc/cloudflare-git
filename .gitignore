@@ -38,3 +38,6 @@ coverage/
 
 # Claude / planning
 .superpowers/
+
+# Keep the template
+!.dev.vars.example

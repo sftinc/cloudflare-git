@@ -1,0 +1,14 @@
+{
+  "name": "cloudflare-git-test",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-22",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [{ "binding": "DB", "database_name": "test", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "migrations" }],
+  "vars": {
+    "OWNER_EMAIL": "owner@example.com",
+    "ACCESS_TEAM_DOMAIN": "test.cloudflareaccess.com",
+    "ACCESS_AUD": "test-aud",
+    "SITE_ORIGIN": "https://git.test",
+    "COOKIE_SECRET": "test-cookie-secret"
+  }
+}

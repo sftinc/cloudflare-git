@@ -1,0 +1,3 @@
+COOKIE_SECRET=change-me-to-a-long-random-string
+# Optional, local dev/e2e only: JSON {"keys":[...]} used instead of fetching Access certs.
+# ACCESS_JWKS=

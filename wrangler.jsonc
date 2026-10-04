@@ -1,0 +1,36 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "cloudflare-git",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-22",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": { "directory": "./public" },
+  "observability": { "enabled": true },
+  // Local dev. D1 runs locally; Artifacts is always remote (no simulator).
+  "d1_databases": [
+    { "binding": "DB", "database_name": "cloudflare-git-dev", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "migrations" }
+  ],
+  "artifacts": [{ "binding": "ARTIFACTS", "namespace": "cloudflare-git-dev", "remote": true }],
+  "vars": {
+    "OWNER_EMAIL": "owner@example.com",
+    "ACCESS_TEAM_DOMAIN": "dev.cloudflareaccess.com",
+    "ACCESS_AUD": "dev-aud",
+    "SITE_ORIGIN": "http://localhost:8787"
+  },
+  "env": {
+    "production": {
+      // Fill in during deployment (see README).
+      "routes": [{ "pattern": "git.example.com", "custom_domain": true }],
+      "d1_databases": [
+        { "binding": "DB", "database_name": "cloudflare-git", "database_id": "REPLACE_WITH_D1_ID", "migrations_dir": "migrations" }
+      ],
+      "artifacts": [{ "binding": "ARTIFACTS", "namespace": "cloudflare-git" }],
+      "vars": {
+        "OWNER_EMAIL": "REPLACE_ME",
+        "ACCESS_TEAM_DOMAIN": "REPLACE_ME.cloudflareaccess.com",
+        "ACCESS_AUD": "REPLACE_ME",
+        "SITE_ORIGIN": "https://git.example.com"
+      }
+    }
+  }
+}
