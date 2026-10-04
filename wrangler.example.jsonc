@@ -18,7 +18,7 @@
   },
   "env": {
     "production": {
-      // Fill in during deployment (see README).
+      // Fill in during deployment (see README). Copy this file to wrangler.jsonc first; wrangler.jsonc is gitignored.
       "routes": [{ "pattern": "git.example.com", "custom_domain": true }],
       "workers_dev": false,
       "preview_urls": false,

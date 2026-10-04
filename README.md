@@ -24,6 +24,7 @@ manage anything.
 
 ```sh
 npm install
+cp wrangler.example.jsonc wrangler.jsonc   # your config; gitignored
 cp .dev.vars.example .dev.vars        # set COOKIE_SECRET to a long random string
 npm run db:migrate:local
 npm run dev                           # http://localhost:8787
@@ -55,7 +56,7 @@ headless Chrome (`.e2e/screenshots/`), and deletes its repos at the end. It neve
 
 ## Deploy
 
-1. Create the database and put its id in `env.production.d1_databases` in `wrangler.jsonc`:
+1. If you haven't already, `cp wrangler.example.jsonc wrangler.jsonc` (gitignored, so your hostname and IDs stay out of the repo). Create the database and put its id in `env.production.d1_databases` in `wrangler.jsonc`:
    ```sh
    npx wrangler d1 create cloudflare-git
    ```

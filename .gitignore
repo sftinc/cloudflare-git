@@ -44,3 +44,6 @@ coverage/
 
 # End-to-end run output
 .e2e/
+
+# Your deployment config (copy from wrangler.example.jsonc)
+wrangler.jsonc
