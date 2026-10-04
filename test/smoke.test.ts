@@ -12,4 +12,9 @@ describe("scaffold", () => {
     const row = await env.DB.prepare("SELECT count(*) AS n FROM sqlite_master WHERE type='table' AND name='repos'").first<{ n: number }>();
     expect(row?.n).toBe(1);
   });
+
+  it("ignores the developer's .dev.vars", () => {
+    expect(env.COOKIE_SECRET).toBe("test-cookie-secret");
+    expect(env.ACCESS_JWKS).toBeUndefined();
+  });
 });

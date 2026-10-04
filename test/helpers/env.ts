@@ -3,7 +3,7 @@ import app from "../../src/index";
 import { FakeArtifacts } from "./fake-artifacts";
 
 export function makeEnv(overrides: Partial<Env> & Record<string, unknown> = {}): Env {
-  return { ...env, ARTIFACTS: new FakeArtifacts(), ...overrides } as unknown as Env;
+  return { ...env, COOKIE_SECRET: "test-cookie-secret", ACCESS_JWKS: undefined, ARTIFACTS: new FakeArtifacts(), ...overrides } as unknown as Env;
 }
 
 /** Calls the app. Read the body before awaiting done() (push responses stream). */
