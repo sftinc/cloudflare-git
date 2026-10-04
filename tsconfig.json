@@ -7,6 +7,7 @@
     "types": ["@cloudflare/vitest-pool-workers/types"],
     "jsx": "react-jsx",
     "jsxImportSource": "hono/jsx",
+    "paths": { "highlight.js/lib/common": ["./src/render/highlight-js.d.ts"] },
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,

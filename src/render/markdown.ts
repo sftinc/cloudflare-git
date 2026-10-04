@@ -1,0 +1,49 @@
+import MarkdownIt from "markdown-it";
+import { blobHref, resolveRelative } from "./paths";
+
+export type MdContext = { repo: string; branch: string; dir: string };
+
+const SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+const md = new MarkdownIt({ html: false, linkify: true });
+
+md.validateLink = (url) => {
+  const u = url.trim().toLowerCase();
+  return !SCHEME.test(u) || /^(https?|mailto):/.test(u);
+};
+
+function rewrite(href: string, ctx: MdContext): string {
+  if (SCHEME.test(href) || href.startsWith("#") || href.startsWith("//")) return href;
+  const hashAt = href.indexOf("#");
+  const pathPart = hashAt < 0 ? href : href.slice(0, hashAt);
+  const hash = hashAt < 0 ? "" : href.slice(hashAt);
+  let decoded: string;
+  try {
+    decoded = decodeURI(pathPart);
+  } catch {
+    return "#";
+  }
+  const resolved = resolveRelative(ctx.dir, decoded);
+  return resolved === null || resolved === "" ? "#" : blobHref(ctx.repo, ctx.branch, resolved) + hash;
+}
+
+md.renderer.rules.link_open = (tokens, idx, opts, env, self) => {
+  const t = tokens[idx];
+  const href = t.attrGet("href")?.toString();
+  if (href) {
+    t.attrSet("href", rewrite(href, env as MdContext));
+    if (/^https?:/i.test(href)) t.attrSet("rel", "nofollow noopener");
+  }
+  return self.renderToken(tokens, idx, opts);
+};
+
+// Spec §9: no embedded images in v1 — alt text plus a link to the file.
+md.renderer.rules.image = (tokens, idx, opts, env, self) => {
+  const t = tokens[idx];
+  const alt = self.renderInlineAsText(t.children ?? [], opts, env) || "image";
+  const href = rewrite(String(t.attrGet("src") ?? ""), env as MdContext);
+  return `<a class="md-image" href="${md.utils.escapeHtml(href)}">[image: ${md.utils.escapeHtml(alt)}]</a>`;
+};
+
+export function renderMarkdown(src: string, ctx: MdContext): string {
+  return md.render(src, ctx);
+}
