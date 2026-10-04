@@ -9,6 +9,7 @@ export function Layout(props: { title: string; admin?: boolean; children?: Child
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>{props.title}</title>
+        <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
         <link rel="stylesheet" href="/static/style.css" />
         <script src="/static/app.js" defer></script>
       </head>

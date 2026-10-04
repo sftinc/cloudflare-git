@@ -29,6 +29,13 @@ describe("markdown", () => {
     expect(out).toContain('href="/site/blob/feature/x/docs/img/logo.png"');
     expect(out).toContain("Logo");
   });
+  it("aligns table columns with classes, not inline styles (CSP blocks style attributes)", () => {
+    const out = renderMarkdown("| a | b | c |\n| :- | :-: | -: |\n| 1 | 2 | 3 |", ctx);
+    expect(out).not.toContain("style=");
+    expect(out).toContain('<th class="align-left">a</th>');
+    expect(out).toContain('<td class="align-center">2</td>');
+    expect(out).toContain('<td class="align-right">3</td>');
+  });
 });
 
 describe("highlight", () => {

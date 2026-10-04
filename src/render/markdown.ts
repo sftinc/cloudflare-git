@@ -11,6 +11,17 @@ md.validateLink = (url) => {
   return !SCHEME.test(u) || /^(https?|mailto):/.test(u);
 };
 
+// markdown-it aligns table cells with style="text-align:…", which the CSP blocks; use classes instead.
+md.core.ruler.push("align_classes", (state) => {
+  for (const t of state.tokens) {
+    if (t.type !== "th_open" && t.type !== "td_open") continue;
+    const m = /^text-align:(left|center|right)$/.exec(String(t.attrGet("style")));
+    if (!m) continue;
+    t.attrs = t.attrs!.filter(([k]) => k !== "style");
+    t.attrJoin("class", `align-${m[1]}`);
+  }
+});
+
 function rewrite(href: string, ctx: MdContext): string {
   if (SCHEME.test(href) || href.startsWith("#") || href.startsWith("//")) return href;
   const hashAt = href.indexOf("#");
