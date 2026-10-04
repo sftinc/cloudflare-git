@@ -1,0 +1,108 @@
+import { describe, expect, it } from "vitest";
+import { env } from "cloudflare:test";
+import * as repos from "../src/db/repos";
+import * as invites from "../src/db/invites";
+import * as tokens from "../src/db/tokens";
+import * as hooks from "../src/db/webhooks";
+
+const db = env.DB;
+const T = 1_700_000_000_000;
+const HOUR = 3_600_000;
+
+async function liveRepo(name: string, isPublic = false) {
+  const r = await repos.insertRepo(db, { name, description: null }, T);
+  await repos.markProvisioned(db, r.id, T);
+  if (isPublic) await repos.setPublic(db, r.id, true, T);
+  return (await repos.findRepoById(db, r.id))!;
+}
+
+describe("repos", () => {
+  it("only provisioned, undeleted repos are live", async () => {
+    const r = await repos.insertRepo(db, { name: "draft", description: null }, T);
+    expect(await repos.findLiveRepo(db, "draft")).toBeNull();
+    await repos.markProvisioned(db, r.id, T);
+    expect((await repos.findLiveRepo(db, "draft"))?.id).toBe(r.id);
+    await repos.setDeleted(db, r.id, true, T);
+    expect(await repos.findLiveRepo(db, "draft")).toBeNull();
+    expect((await repos.findRepoByName(db, "draft"))?.deleted_at).toBe(T);
+    expect((await repos.listLiveRepos(db)).map((x) => x.name)).not.toContain("draft");
+    expect((await repos.listReposForAdmin(db)).map((x) => x.name)).toContain("draft");
+  });
+  it("names stay reserved after delete", async () => {
+    const r = await liveRepo("taken");
+    await repos.setDeleted(db, r.id, true, T);
+    await expect(repos.insertRepo(db, { name: "taken", description: null }, T)).rejects.toThrow();
+  });
+});
+
+describe("invites", () => {
+  it("redeems once, inside the window, and computes expiry from redemption", async () => {
+    const r = await liveRepo("priv");
+    const id = await invites.createInvite(db, { label: "Sam", codeHash: "c1", accessMs: 7 * 24 * HOUR, redeemByAt: T + 24 * HOUR, repoIds: [r.id] }, T);
+    expect(await invites.redeemInvite(db, id, "p1", T + HOUR)).toBe(true);
+    expect(await invites.redeemInvite(db, id, "p2", T + HOUR)).toBe(false);
+    const inv = (await invites.findInviteByCodeHash(db, "c1"))!;
+    expect(inv.access_expires_at).toBe(T + HOUR + 7 * 24 * HOUR);
+    expect(await invites.inviteCoversRepoByPassword(db, "p1", r.id, T + 2 * HOUR)).toBe(true);
+    expect(await invites.inviteCoversRepoByPassword(db, "p1", r.id, T + 9 * 24 * HOUR)).toBe(false);
+    expect([...(await invites.coveredRepoIds(db, [id], T + 2 * HOUR))]).toEqual([r.id]);
+  });
+  it("cannot be redeemed after redeem_by_at", async () => {
+    const id = await invites.createInvite(db, { label: "Late", codeHash: "c2", accessMs: null, redeemByAt: T + HOUR, repoIds: [] }, T);
+    expect(await invites.redeemInvite(db, id, "p3", T + 2 * HOUR)).toBe(false);
+  });
+  it("never-expiring access, revoke and delete", async () => {
+    const r = await liveRepo("priv2");
+    const id = await invites.createInvite(db, { label: "Forever", codeHash: "c3", accessMs: null, redeemByAt: T + HOUR, repoIds: [r.id] }, T);
+    await invites.redeemInvite(db, id, "p4", T);
+    expect((await invites.findInviteByCodeHash(db, "c3"))!.access_expires_at).toBeNull();
+    expect(await invites.inviteCoversRepoByPassword(db, "p4", r.id, T + 1e12)).toBe(true);
+    await invites.revokeInvite(db, id, T);
+    expect(await invites.inviteCoversRepoByPassword(db, "p4", r.id, T)).toBe(false);
+    expect(invites.inviteStatus((await invites.findInviteByCodeHash(db, "c3"))!, T)).toBe("revoked");
+    await invites.deleteInvite(db, id, T);
+    expect(await invites.findInviteByCodeHash(db, "c3")).toBeNull();
+    expect((await invites.listInvites(db)).map((i) => i.id)).not.toContain(id);
+  });
+  it("excludes deleted repos and handles an empty id list", async () => {
+    const r = await liveRepo("gone");
+    const id = await invites.createInvite(db, { label: "x", codeHash: "c4", accessMs: null, redeemByAt: T + HOUR, repoIds: [r.id] }, T);
+    await invites.redeemInvite(db, id, "p5", T);
+    await repos.setDeleted(db, r.id, true, T);
+    expect(await invites.reposForInvite(db, id)).toEqual([]);
+    expect((await invites.coveredRepoIds(db, [], T)).size).toBe(0);
+  });
+});
+
+describe("push tokens", () => {
+  it("unrestricted tokens work everywhere; restricted ones only on their repos", async () => {
+    const a = await liveRepo("ta"), b = await liveRepo("tb");
+    const all = await tokens.createPushToken(db, { name: "laptop", tokenHash: "h-all", repoIds: [] }, T);
+    await tokens.createPushToken(db, { name: "ci", tokenHash: "h-a", repoIds: [a.id] }, T);
+    expect(await tokens.findValidPushTokenId(db, "h-all", b.id)).toBe(all);
+    expect(await tokens.findValidPushTokenId(db, "h-a", a.id)).not.toBeNull();
+    expect(await tokens.findValidPushTokenId(db, "h-a", b.id)).toBeNull();
+    await tokens.revokePushToken(db, all, T);
+    expect(await tokens.findValidPushTokenId(db, "h-all", b.id)).toBeNull();
+  });
+  it("deleted tokens are hidden and invalid", async () => {
+    const r = await liveRepo("tc");
+    const id = await tokens.createPushToken(db, { name: "old", tokenHash: "h-old", repoIds: [] }, T);
+    await tokens.deletePushToken(db, id, T);
+    expect(await tokens.findValidPushTokenId(db, "h-old", r.id)).toBeNull();
+    expect((await tokens.listPushTokens(db)).map((t) => t.id)).not.toContain(id);
+  });
+});
+
+describe("webhooks", () => {
+  it("matches by branch filter and ignores deleted hooks", async () => {
+    const r = await liveRepo("hooked");
+    const any = await hooks.createWebhook(db, { repoId: r.id, url: "https://a.test/", branch: null, secret: "s" }, T);
+    const main = await hooks.createWebhook(db, { repoId: r.id, url: "https://b.test/", branch: "main", secret: "s" }, T);
+    expect((await hooks.matchingWebhooks(db, r.id, "main")).map((h) => h.id).sort()).toEqual([any, main].sort());
+    expect((await hooks.matchingWebhooks(db, r.id, "dev")).map((h) => h.id)).toEqual([any]);
+    await hooks.deleteWebhook(db, any, T);
+    expect((await hooks.matchingWebhooks(db, r.id, "dev"))).toEqual([]);
+    expect((await hooks.listWebhooks(db, r.id)).map((h) => h.id)).toEqual([main]);
+  });
+});
