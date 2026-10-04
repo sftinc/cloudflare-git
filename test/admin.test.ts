@@ -1,0 +1,124 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { env } from "cloudflare:test";
+import { clearArtifactsCaches } from "../src/artifacts";
+import { resetAccessKeys } from "../src/auth/access-jwt";
+import { sha256Hex } from "../src/lib/crypto";
+import * as repos from "../src/db/repos";
+import * as tokens from "../src/db/tokens";
+import { FakeArtifacts } from "./helpers/fake-artifacts";
+import { request } from "./helpers/env";
+import { ownerEnv, ownerToken } from "./helpers/jwt";
+
+let fake: FakeArtifacts;
+let jwt: string;
+const secretOf = (html: string) => /<code id="secret">([^<]+)<\/code>/.exec(html)?.[1];
+
+beforeEach(async () => {
+  clearArtifactsCaches();
+  resetAccessKeys();
+  fake = new FakeArtifacts();
+  jwt = await ownerToken();
+});
+afterEach(() => vi.restoreAllMocks());
+
+async function call(method: string, path: string, form?: Record<string, string | string[]>, headers: Record<string, string> = {}) {
+  const body = new URLSearchParams();
+  for (const [k, v] of Object.entries(form ?? {})) for (const x of [v].flat()) body.append(k, x);
+  const { res } = await request(path, {
+    method,
+    redirect: "manual",
+    headers: { "cf-access-jwt-assertion": jwt, Origin: "https://git.test", ...(form ? { "Content-Type": "application/x-www-form-urlencoded" } : {}), ...headers },
+    body: form ? body : undefined,
+  }, await ownerEnv({ ARTIFACTS: fake }));
+  return { status: res.status, location: res.headers.get("location"), html: await res.text() };
+}
+
+describe("admin auth", () => {
+  it("is 404 without a valid Access JWT", async () => {
+    const { res } = await request("/admin", {}, await ownerEnv({ ARTIFACTS: fake }));
+    expect(res.status).toBe(404);
+    const bad = await request("/admin", { headers: { "cf-access-jwt-assertion": await ownerToken({ email: "x@y.z" }) } }, await ownerEnv({ ARTIFACTS: fake }));
+    expect(bad.res.status).toBe(404);
+  });
+  it("rejects cross-origin POSTs", async () => {
+    expect((await call("POST", "/admin/repos", { name: "x1" }, { Origin: "https://evil.test" })).status).toBe(403);
+  });
+  it("renders the admin nav", async () => {
+    const r = await call("GET", "/admin");
+    expect(r.status).toBe(200);
+    expect(r.html).toContain('href="/admin/invites"');
+  });
+});
+
+describe("repos", () => {
+  it("creates a repo and redirects to its settings", async () => {
+    const r = await call("POST", "/admin/repos", { name: "site", defaultBranch: "main", description: "" });
+    expect(r.status).toBe(303);
+    expect(r.location).toMatch(/^\/admin\/repos\/[0-9a-f-]{36}$/);
+    expect(fake.repos.has("site")).toBe(true);
+    expect((await call("GET", r.location!)).html).toContain("Ready");
+  });
+  it("re-renders the form with values and the error on failure", async () => {
+    fake.failNext = { method: "create", code: "INTERNAL_ERROR" };
+    const r = await call("POST", "/admin/repos", { name: "flaky", defaultBranch: "trunk", description: "keep me" });
+    expect(r.status).toBe(422);
+    expect(r.html).toContain('value="flaky"');
+    expect(r.html).toContain('value="keep me"');
+    expect(r.html).toContain('value="trunk"');
+    expect(r.html).toContain("Not created");
+    expect((await call("POST", "/admin/repos", { name: "flaky", defaultBranch: "trunk" })).status).toBe(303);
+  });
+  it("rejects reserved names", async () => {
+    const r = await call("POST", "/admin/repos", { name: "admin" });
+    expect(r.status).toBe(422);
+    expect(r.html).toContain("reserved");
+  });
+  it("clears credential URLs on import", async () => {
+    const r = await call("POST", "/admin/import", { name: "imp", url: "https://u:p@github.com/a/b" });
+    expect(r.status).toBe(422);
+    expect(r.html).not.toContain("u:p@");
+  });
+  it("toggles visibility, deletes and restores", async () => {
+    const id = (await call("POST", "/admin/repos", { name: "vis" })).location!.split("/").pop()!;
+    await call("POST", `/admin/repos/${id}/visibility`, { public: "1" });
+    expect((await repos.findRepoById(env.DB, id))!.public_at).not.toBeNull();
+    await call("POST", `/admin/repos/${id}/delete`, {});
+    expect((await repos.findRepoById(env.DB, id))!.deleted_at).not.toBeNull();
+    const again = await call("POST", "/admin/repos", { name: "vis" });
+    expect(again.html).toContain(`/admin/repos/${id}/restore`);
+    await call("POST", `/admin/repos/${id}/restore`, {});
+    expect((await repos.findRepoById(env.DB, id))!.deleted_at).toBeNull();
+  });
+  it("adds a webhook and shows its secret once", async () => {
+    const id = (await call("POST", "/admin/repos", { name: "hooky" })).location!.split("/").pop()!;
+    const added = await call("POST", `/admin/repos/${id}/webhooks`, { url: "https://ci.test/hook", branch: "main" });
+    expect(secretOf(added.html)).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    const page = await call("GET", `/admin/repos/${id}`);
+    expect(page.html).toContain("https://ci.test/hook");
+    expect(secretOf(page.html)).toBeUndefined();
+    expect((await call("POST", `/admin/repos/${id}/webhooks`, { url: "http://evil.test/hook" })).status).toBe(422);
+  });
+});
+
+describe("invites and tokens", () => {
+  it("creates an invite link", async () => {
+    const id = (await call("POST", "/admin/repos", { name: "inv" })).location!.split("/").pop()!;
+    const r = await call("POST", "/admin/invites", { label: "Sam", repos: [id], redeem: "24h", access: "never" });
+    expect(secretOf(r.html)).toMatch(/^https:\/\/git\.test\/invite\/[A-Za-z0-9_-]{43}$/);
+    expect(r.html).toContain("waiting");
+    expect((await call("POST", "/admin/invites", { label: "", repos: [], redeem: "24h", access: "never" })).status).toBe(422);
+  });
+  it("creates a push token that git accepts, then revokes it", async () => {
+    const r = await call("POST", "/admin/tokens", { name: "laptop" });
+    const tok = secretOf(r.html)!;
+    const id = (await call("POST", "/admin/repos", { name: "tk" })).location!.split("/").pop()!;
+    expect(await tokens.findValidPushTokenId(env.DB, await sha256Hex(tok), id)).not.toBeNull();
+    const listed = (await tokens.listPushTokens(env.DB))[0];
+    await call("POST", `/admin/tokens/${listed.id}/revoke`, {});
+    expect(await tokens.findValidPushTokenId(env.DB, await sha256Hex(tok), id)).toBeNull();
+  });
+});
+
+it("no inline style attributes anywhere in admin pages (CSP)", async () => {
+  for (const p of ["/admin", "/admin/invites", "/admin/tokens"]) expect((await call("GET", p)).html).not.toMatch(/\sstyle=/);
+});
