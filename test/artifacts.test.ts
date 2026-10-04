@@ -31,6 +31,20 @@ describe("listBranches", () => {
     stubArtifactsGit(fake);
     expect(await listBranches(asArt(fake), "site")).toEqual({ branches: ["main", "feature/x"], head: "main" });
   });
+  it("reports no head when HEAD's symref names a branch that does not exist", async () => {
+    const fake = new FakeArtifacts();
+    fake.seed("site", { defaultBranch: "main", branches: { master: { files: { a: "1" } }, dev: { files: { a: "1" } } } });
+    stubArtifactsGit(fake);
+    expect(await listBranches(asArt(fake), "site")).toEqual({ branches: ["dev", "master"], head: null });
+  });
+  it("drops the cached token when the advertisement is 401/403", async () => {
+    const fake = new FakeArtifacts();
+    fake.seed("site", { branches: { main: { files: { a: "1" } } } });
+    stubFetch(() => new Response("nope", { status: 401 }));
+    await expect(listBranches(asArt(fake), "site")).rejects.toBeInstanceOf(UpstreamError);
+    await getRepoAccess(asArt(fake), "site", "read");
+    expect(fake.tokens).toHaveLength(2);
+  });
   it("throws UpstreamError on a failed advertisement", async () => {
     const fake = new FakeArtifacts();
     fake.seed("site", { branches: { main: { files: { a: "1" } } } });

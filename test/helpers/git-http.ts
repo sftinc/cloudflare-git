@@ -42,7 +42,8 @@ export function stubArtifactsGit(fake: FakeArtifacts, extra?: Handler) {
       if (!r) return new Response("not found", { status: 404 });
       const refs: Record<string, string> = {};
       for (const b of r.commits.keys()) refs[`refs/heads/${b}`] = fakeHash(`commit:${b}:0`);
-      return new Response(refAdvertisement(refs, r.commits.size ? r.defaultBranch : null), {
+      // Artifacts advertises HEAD's symref even when that branch has never been pushed.
+      return new Response(refAdvertisement(refs, r.defaultBranch), {
         headers: { "Content-Type": "application/x-git-upload-pack-advertisement" },
       });
     }

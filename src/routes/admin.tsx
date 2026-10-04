@@ -23,6 +23,7 @@ adminRoutes.use("*", async (c, next) => {
   if (!ok) return c.notFound();
   if (c.req.method === "POST" && c.req.header("origin") !== c.env.SITE_ORIGIN) return c.text("Forbidden", 403);
   await next();
+  c.res.headers.set("Cache-Control", "no-store"); // pages show secrets
 });
 
 const admin = (c: Context<AppEnv>, title: string, body: unknown, status = 200) => page(c, title, body as never, status, { admin: true });
@@ -35,9 +36,14 @@ async function reposPage(c: Context<AppEnv>, extra: { error?: string; form?: "cr
   const pending = new Set<string>();
   for (const r of repos) {
     if (r.deleted_at === null && r.provisioned_at === null) {
-      const s = await refreshProvisioning(c.env.DB, c.env.ARTIFACTS, r, now);
-      if (s === "ready") r.provisioned_at = now;
-      if (s === "pending") pending.add(r.id);
+      try {
+        const s = await refreshProvisioning(c.env.DB, c.env.ARTIFACTS, r, now);
+        if (s === "ready") r.provisioned_at = now;
+        if (s === "pending") pending.add(r.id);
+      } catch (err) {
+        // One bad row must not lock the owner out of the list; it shows as "Not created".
+        console.error(JSON.stringify({ msg: "provisioning check failed", repo: r.name, error: String(err) }));
+      }
     }
   }
   return admin(c, "Repositories · admin", <AdminRepos repos={repos} pending={pending} {...extra} />, status);
@@ -111,7 +117,7 @@ adminRoutes.post("/repos/:id/webhooks", async (c) => {
   const error = webhookUrlError(url);
   if (error) return repoPage(c, { error }, 422);
   const secret = randomSecret();
-  await createWebhook(c.env.DB, { repoId: c.req.param("id"), url, branch: str(b.branch) || null, secret }, Date.now());
+  await createWebhook(c.env.DB, { repoId: c.req.param("id"), url, branch: str(b.branch).replace(/^refs\/heads\//, "") || null, secret }, Date.now());
   return repoPage(c, { secret: { title: "Webhook signing secret", value: secret } });
 });
 

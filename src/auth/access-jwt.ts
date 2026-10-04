@@ -9,14 +9,21 @@ const enc = new TextEncoder();
 
 let keys = new Map<string, CryptoKey>();
 let lastLoadAt = -Infinity;
+let loading: Promise<void> | null = null;
 
 export function resetAccessKeys() {
   keys = new Map();
   lastLoadAt = -Infinity;
+  loading = null;
+}
+
+/** Concurrent callers share one fetch; only a successful load starts the reload throttle. */
+function loadKeysOnce(env: AccessEnv, now: number) {
+  loading ??= loadKeys(env, now).finally(() => (loading = null));
+  return loading;
 }
 
 async function loadKeys(env: AccessEnv, now: number) {
-  lastLoadAt = now;
   let jwks: { keys: (JsonWebKey & { kid: string })[] };
   if (env.ACCESS_JWKS) jwks = JSON.parse(env.ACCESS_JWKS);
   else {
@@ -29,6 +36,7 @@ async function loadKeys(env: AccessEnv, now: number) {
     next.set(k.kid, await crypto.subtle.importKey("jwk", k, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]));
   }
   keys = next;
+  lastLoadAt = now;
 }
 
 function decodeJson(part: string): Record<string, unknown> | null {
@@ -49,7 +57,7 @@ export async function verifyAccessJwt(token: string, env: AccessEnv, now: number
 
   let key = keys.get(header.kid);
   if (!key && now - lastLoadAt > RELOAD_MIN_MS) {
-    await loadKeys(env, now);
+    await loadKeysOnce(env, now);
     key = keys.get(header.kid);
   }
   if (!key) return false;

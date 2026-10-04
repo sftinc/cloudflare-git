@@ -57,17 +57,20 @@ export async function getRepoAccess(art: Artifacts, name: string, scope: "read" 
   return { remote: r, token: t.plaintext };
 }
 
-/** Branch names from the git ref advertisement; Artifacts has no branch-list API. */
+/** Branch names from the git ref advertisement (Artifacts has no branch-list API); head is null unless it exists. */
 export async function listBranches(art: Artifacts, name: string) {
   const { remote, token } = await getRepoAccess(art, name, "read");
   const res = await fetch(`${remote}/info/refs?service=git-upload-pack`, {
     headers: { Authorization: `Bearer ${token}`, "User-Agent": "git/cloudflare-git" },
   });
-  if (!res.ok) throw new UpstreamError(`info/refs for ${name} returned ${res.status}`);
-  const { refs, head } = parseRefAdvertisement(new Uint8Array(await res.arrayBuffer()));
-  const branches = [...refs.keys()]
-    .filter((r) => r.startsWith("refs/heads/"))
-    .map((r) => r.slice("refs/heads/".length))
-    .sort((a, b) => (a === head ? -1 : b === head ? 1 : a.localeCompare(b)));
+  if (!res.ok) {
+    if (res.status === 401 || res.status === 403) forgetRepoAccess(name);
+    throw new UpstreamError(`info/refs for ${name} returned ${res.status}`);
+  }
+  const advert = parseRefAdvertisement(new Uint8Array(await res.arrayBuffer()));
+  const names = [...advert.refs.keys()].filter((r) => r.startsWith("refs/heads/")).map((r) => r.slice("refs/heads/".length));
+  // HEAD's symref can name a branch that was never pushed (e.g. default "main", only "master" pushed).
+  const head = advert.head !== null && names.includes(advert.head) ? advert.head : null;
+  const branches = names.sort((a, b) => (a === head ? -1 : b === head ? 1 : a.localeCompare(b)));
   return { branches, head };
 }

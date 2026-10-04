@@ -16,7 +16,11 @@ export function basicPassword(header: string | undefined): string | null {
   }
 }
 
-/** Spec §4. No credentials → 401 for any name; wrong credentials or no access → 404. */
+/**
+ * Spec §4. No credentials → 401 for any name; wrong credentials or no access → 404,
+ * except a failed push to a public repo → 401, so git drops the bad stored credential
+ * (the repo's existence is public anyway).
+ */
 export async function decideGitAccess(
   db: D1Database,
   repo: RepoRow | null,
@@ -31,5 +35,5 @@ export async function decideGitAccess(
   const tokenId = await findValidPushTokenId(db, hash, repo.id);
   if (tokenId) return { kind: "allow", pushTokenId: tokenId };
   if (op === "fetch" && (await inviteCoversRepoByPassword(db, hash, repo.id, now))) return { kind: "allow" };
-  return { kind: "notfound" };
+  return repo.public_at !== null ? { kind: "unauthorized" } : { kind: "notfound" };
 }

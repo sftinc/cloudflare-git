@@ -60,6 +60,7 @@ describe("invites", () => {
     const { res } = await request("/invite/code-3", POST(), e());
     const body = await res.text();
     expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
     const cookie = res.headers.get("set-cookie")!.split(";")[0];
     expect(cookie).toMatch(/^cg_invites=/);
     const m = /https:\/\/x:([A-Za-z0-9_-]{43})@git\.test\/secret\.git/.exec(body);

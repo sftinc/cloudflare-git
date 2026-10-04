@@ -34,7 +34,9 @@ async function deliverOne(hook: WebhookRow, event: PushEvent) {
       body,
       signal: AbortSignal.timeout(10_000),
     });
-    console.log(JSON.stringify({ msg: "webhook delivered", webhook: hook.id, url: hook.url, status: res.status, ms: Date.now() - started }));
+    const line = JSON.stringify({ msg: res.ok ? "webhook delivered" : "webhook rejected", webhook: hook.id, url: hook.url, status: res.status, ms: Date.now() - started });
+    if (res.ok) console.log(line);
+    else console.warn(line);
   } catch (err) {
     console.warn(JSON.stringify({ msg: "webhook failed", webhook: hook.id, url: hook.url, error: String(err), ms: Date.now() - started }));
   }

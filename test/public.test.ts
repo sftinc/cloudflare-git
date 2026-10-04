@@ -18,7 +18,7 @@ async function addRepo(name: string, isPublic: boolean) {
 }
 
 beforeEach(async () => {
-  await env.DB.prepare("DELETE FROM repos WHERE name IN ('site','secret','empty')").run();
+  await env.DB.prepare("DELETE FROM repos WHERE name IN ('site','secret','empty','legacy')").run();
   clearArtifactsCaches();
   resetAccessKeys();
   fake = new FakeArtifacts();
@@ -69,6 +69,13 @@ describe("home", () => {
 });
 
 describe("repo pages", () => {
+  it("repo home falls back to an existing branch when HEAD names a missing one", async () => {
+    fake.seed("legacy", { defaultBranch: "main", branches: { master: { files: { "README.md": "# On master" } } } });
+    await addRepo("legacy", true);
+    const { status, body } = await html("/legacy");
+    expect(status).toBe(200);
+    expect(body).toContain("<h1>On master</h1>");
+  });
   it("repo home renders README safely, files, clone URL and branches", async () => {
     const { status, body } = await html("/site");
     expect(status).toBe(200);

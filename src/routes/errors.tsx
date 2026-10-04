@@ -8,7 +8,7 @@ const isGitPath = (path: string) => /^\/[^/]+\.git(\/|$)/.test(path);
 
 export function notFoundPage(c: Context<AppEnv>) {
   if (isGitPath(c.req.path)) return c.text("Not found", 404);
-  return page(c, "Not found", <NotFound />, 404, { admin: c.req.path.startsWith("/admin") });
+  return page(c, "Not found", <NotFound />, 404); // never the admin nav: /admin 404s go to logged-out visitors
 }
 
 export function handleError(err: Error, c: Context<AppEnv>) {

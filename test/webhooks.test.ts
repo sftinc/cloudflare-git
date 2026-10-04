@@ -63,4 +63,15 @@ describe("deliverWebhooks", () => {
     expect(ok.headers.get("x-delivery-id")).toMatch(/^[0-9a-f-]{36}$/);
     expect(ok.headers.get("content-type")).toBe("application/json");
   });
+
+  it("logs non-2xx replies as rejected, at warn", async () => {
+    const r = await repos.insertRepo(env.DB, { name: "wh-rej", description: null }, 1);
+    await hooks.createWebhook(env.DB, { repoId: r.id, url: "https://rej.test/hook", branch: null, secret: "k" }, 1);
+    stubFetch(() => new Response("no", { status: 500 }));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    await deliverWebhooks(env.DB, r, [{ repo: "wh-rej", branch: "main", before: A, after: B, deleted: false, pushed_at: 5 }]);
+    expect(log).not.toHaveBeenCalled();
+    expect(JSON.parse(warn.mock.calls[0][0] as string)).toMatchObject({ msg: "webhook rejected", status: 500 });
+  });
 });

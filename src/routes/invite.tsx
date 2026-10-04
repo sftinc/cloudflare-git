@@ -19,6 +19,7 @@ inviteRoutes.get("/:code", async (c) => {
 // POST redeems, so link previews in chat apps can't use up the invite.
 inviteRoutes.post("/:code", async (c) => {
   if (c.req.header("origin") !== c.env.SITE_ORIGIN) return c.text("Forbidden", 403);
+  c.header("Cache-Control", "no-store"); // the accepted page shows a clone password
   const now = Date.now();
   const inv = await findInviteByCodeHash(c.env.DB, await sha256Hex(c.req.param("code")));
   const password = randomSecret();

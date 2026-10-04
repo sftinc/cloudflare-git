@@ -5,6 +5,7 @@ import { resetAccessKeys } from "../src/auth/access-jwt";
 import { sha256Hex } from "../src/lib/crypto";
 import * as repos from "../src/db/repos";
 import * as tokens from "../src/db/tokens";
+import * as hooks from "../src/db/webhooks";
 import { FakeArtifacts } from "./helpers/fake-artifacts";
 import { request } from "./helpers/env";
 import { ownerEnv, ownerToken } from "./helpers/jwt";
@@ -39,6 +40,15 @@ describe("admin auth", () => {
     expect(res.status).toBe(404);
     const bad = await request("/admin", { headers: { "cf-access-jwt-assertion": await ownerToken({ email: "x@y.z" }) } }, await ownerEnv({ ARTIFACTS: fake }));
     expect(bad.res.status).toBe(404);
+  });
+  it("404 pages never show the admin nav", async () => {
+    const { res } = await request("/admin", {}, await ownerEnv({ ARTIFACTS: fake }));
+    expect(await res.text()).not.toContain("/admin/invites");
+  });
+  it("marks admin responses no-store (they show secrets)", async () => {
+    const { res } = await request("/admin/tokens", { headers: { "cf-access-jwt-assertion": jwt } }, await ownerEnv({ ARTIFACTS: fake }));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
   });
   it("rejects cross-origin POSTs", async () => {
     expect((await call("POST", "/admin/repos", { name: "x1" }, { Origin: "https://evil.test" })).status).toBe(403);
@@ -97,6 +107,20 @@ describe("repos", () => {
     expect(page.html).toContain("https://ci.test/hook");
     expect(secretOf(page.html)).toBeUndefined();
     expect((await call("POST", `/admin/repos/${id}/webhooks`, { url: "http://evil.test/hook" })).status).toBe(422);
+  });
+  it("strips refs/heads/ from a webhook branch filter", async () => {
+    const id = (await call("POST", "/admin/repos", { name: "hook-ref" })).location!.split("/").pop()!;
+    await call("POST", `/admin/repos/${id}/webhooks`, { url: "https://ci.test/hook", branch: "refs/heads/main" });
+    expect((await hooks.listWebhooks(env.DB, id)).map((h) => h.branch)).toEqual(["main"]);
+  });
+  it("still lists repos when a provisioning check fails", async () => {
+    const r = await repos.insertRepo(env.DB, { name: "flaky-list", description: null }, Date.now());
+    fake.failNext = { method: "get", code: "INTERNAL_ERROR" };
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const page = await call("GET", "/admin");
+    expect(page.status).toBe(200);
+    expect(page.html).toContain(`/admin/repos/${r.id}`);
+    expect(page.html).toContain("Not created");
   });
 });
 

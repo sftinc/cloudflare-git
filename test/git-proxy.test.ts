@@ -164,6 +164,31 @@ describe("push", () => {
     expect(upstream).toHaveLength(0);
   });
 
+  it("fires webhooks when upstream sends headers before reading the push body", async () => {
+    vi.restoreAllMocks();
+    upstream = [];
+    stubFetch(async (req) => {
+      if (req.url.startsWith("https://hooks.test/")) { upstream.push(req); return new Response("ok"); }
+      const body = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          await req.arrayBuffer();
+          controller.enqueue(report(["unpack ok", "ok refs/heads/main"], true));
+          controller.close();
+        },
+      });
+      return new Response(body, { headers: { "Content-Type": "application/x-git-receive-pack-result" } });
+    });
+    const { res, done } = await request("/priv.git/git-receive-pack", {
+      method: "POST",
+      headers: { ...auth("tok"), "Content-Type": "application/x-git-receive-pack-request" },
+      body: pushBody(),
+    }, e());
+    await res.arrayBuffer();
+    await done();
+    expect(upstream).toHaveLength(1);
+    expect(await upstream[0].json()).toMatchObject({ branch: "main" });
+  });
+
   it("ZERO_SHA delete fires a deleted event", async () => {
     vi.restoreAllMocks();
     upstream = [];

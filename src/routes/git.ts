@@ -58,20 +58,26 @@ async function proxy(c: Context<AppEnv>, service: Service, upstreamPath: string)
   }
   const resHeaders = { "Content-Type": upstream.headers.get("content-type") ?? "application/octet-stream", "Cache-Control": "no-cache" };
   if (!parsePush || !upstream.body) return new Response(upstream.body, { headers: resHeaders });
-  if (!commands.done) {
-    console.warn(JSON.stringify({ msg: "push commands not parsed; webhooks skipped", repo: repo.name }));
-    return new Response(upstream.body, { headers: resHeaders });
-  }
 
-  const sideBand = commands.capabilities.some((cap) => cap === "side-band-64k" || cap === "side-band");
-  const report = new ReportParser(sideBand);
+  // Upstream may send headers before it has read the push body, so wait for the
+  // first response chunk (the report comes after the whole push) to read the commands.
+  let report: ReportParser | null = null;
   let ended!: () => void;
   const finished = new Promise<void>((resolve) => (ended = resolve));
-  const out = upstream.body.pipeThrough(tap((chunk) => report.push(chunk), ended));
+  const out = upstream.body.pipeThrough(
+    tap((chunk) => {
+      if (!report) {
+        if (!commands.done) return true;
+        report = new ReportParser(commands.capabilities.some((cap) => cap === "side-band-64k" || cap === "side-band"));
+      }
+      return report.push(chunk);
+    }, ended),
+  );
   c.executionCtx.waitUntil(
     finished.then(() => {
-      if (!report.done) {
-        console.warn(JSON.stringify({ msg: "report-status not parsed; webhooks skipped", repo: repo.name }));
+      if (!report?.done) {
+        const msg = report ? "report-status not parsed; webhooks skipped" : "push commands not parsed; webhooks skipped";
+        console.warn(JSON.stringify({ msg, repo: repo.name }));
         return;
       }
       return deliverWebhooks(c.env.DB, repo, pushEventsFrom(repo.name, commands.commands, report.results, Date.now()));

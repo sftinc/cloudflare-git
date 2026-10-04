@@ -99,6 +99,9 @@ describe("git credentials", () => {
     const cases: [string, Awaited<ReturnType<typeof repos.findRepoById>>, string | null, "fetch" | "push", string][] = [
       ["public fetch, no creds", pub, null, "fetch", "allow"],
       ["public push, no creds", pub, null, "push", "unauthorized"],
+      ["public push, wrong password (git drops stored creds only on 401)", pub, "nope", "push", "unauthorized"],
+      ["public push, invite password", pub, "inv-pass", "push", "unauthorized"],
+      ["public push, token", pub, "tok-all", "push", "allow"],
       ["private fetch, no creds", priv, null, "fetch", "unauthorized"],
       ["unknown repo, no creds", null, null, "fetch", "unauthorized"],
       ["unknown repo, creds", null, "tok-all", "fetch", "notfound"],

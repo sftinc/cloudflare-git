@@ -59,6 +59,27 @@ describe("verifyAccessJwt", () => {
     expect(spy).toHaveBeenCalledTimes(2);
   });
 
+  it("shares one certs fetch between concurrent verifies on a cold cache", async () => {
+    const k1 = await testKey("k1");
+    const spy = stubFetch(async () => {
+      await new Promise((r) => setTimeout(r, 10));
+      return Response.json({ keys: [k1.jwk] });
+    });
+    const t = await signJwt(k1, ownerClaims(NOW));
+    expect(await Promise.all([verifyAccessJwt(t, base, NOW), verifyAccessJwt(t, base, NOW)])).toEqual([true, true]);
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries the certs fetch on the next request after a failure", async () => {
+    const k1 = await testKey("k1");
+    let fail = true;
+    stubFetch(() => (fail ? new Response("down", { status: 503 }) : Response.json({ keys: [k1.jwk] })));
+    const t = await signJwt(k1, ownerClaims(NOW));
+    await expect(verifyAccessJwt(t, base, NOW)).rejects.toThrow();
+    fail = false;
+    expect(await verifyAccessJwt(t, base, NOW + 1000)).toBe(true);
+  });
+
   it("rejects a kid still unknown after the refetch, without refetching again within 60s", async () => {
     const k1 = await testKey("k1"), k3 = await testKey("k3");
     const spy = stubFetch(() => Response.json({ keys: [k1.jwk] }));
