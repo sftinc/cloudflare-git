@@ -6,7 +6,7 @@ import { fmtDate } from "./public";
 
 const day = (ms: number) => fmtDate(Math.floor(ms / 1000));
 
-export type RepoFormValues = { name?: string; description?: string; defaultBranch?: string; url?: string; branch?: string };
+export type RepoFormValues = { name?: string; description?: string; defaultBranch?: string; url?: string; branch?: string; visibility?: string };
 
 export function Secret(props: { title: string; value: string; children?: unknown }) {
   return (
@@ -32,6 +32,17 @@ export function repoState(r: RepoRow, pending: Set<string>) {
   if (r.deleted_at !== null) return <span class="badge bad">Deleted</span>;
   if (r.provisioned_at === null) return pending.has(r.id) ? <span class="badge warn">Importing…</span> : <span class="badge bad">Not created</span>;
   return r.public_at !== null ? <span class="badge ok">Public</span> : <span class="badge">Private</span>;
+}
+
+function VisibilitySelect(props: { private: boolean }) {
+  return (
+    <label>Visibility
+      <select name="visibility">
+        <option value="public" selected={!props.private}>Public: anyone can browse and clone</option>
+        <option value="private" selected={props.private}>Private: only you and invitees</option>
+      </select>
+    </label>
+  );
 }
 
 export function AdminRepos(props: { repos: RepoRow[]; pending: Set<string>; error?: string; form?: "create" | "import"; values?: RepoFormValues; restoreId?: string }) {
@@ -69,6 +80,7 @@ export function AdminRepos(props: { repos: RepoRow[]; pending: Set<string>; erro
             <label>Name <span class="hint">lowercase letters, digits, hyphens</span><input type="text" name="name" required pattern="[a-z0-9][a-z0-9\-]{1,62}" title="2-63 lowercase letters, digits or hyphens, starting with a letter or digit" value={props.form === "create" ? v.name : ""} /></label>
             <label>Description <span class="hint">optional</span><input type="text" name="description" value={props.form === "create" ? v.description : ""} /></label>
             <label>Default branch<input type="text" name="defaultBranch" value={props.form === "create" ? v.defaultBranch || "main" : "main"} /></label>
+            <VisibilitySelect private={props.form === "create" && v.visibility === "private"} />
             <button type="submit" class="primary">Create</button>
           </form>
         </section>
@@ -80,6 +92,7 @@ export function AdminRepos(props: { repos: RepoRow[]; pending: Set<string>; erro
             <label>Branch <span class="hint">optional, defaults to the source's default</span><input type="text" name="branch" value={props.form === "import" ? v.branch : ""} /></label>
             <p class="hint">Imports one branch and no tags. For every branch and tag, create an empty repo and push a mirror (see README).</p>
             <label>Description <span class="hint">optional</span><input type="text" name="description" value={props.form === "import" ? v.description : ""} /></label>
+            <VisibilitySelect private={props.form === "import" && v.visibility === "private"} />
             <button type="submit" class="primary">Import</button>
           </form>
         </section>

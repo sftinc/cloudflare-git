@@ -52,7 +52,10 @@ async function reposPage(c: Context<AppEnv>, extra: { error?: string; form?: "cr
 
 async function provision(c: Context<AppEnv>, input: ProvisionInput, values: RepoFormValues) {
   const result = await provisionRepo(c.env.DB, c.env.ARTIFACTS, input, Date.now());
-  if (result.ok) return c.redirect(`/admin/repos/${result.repo.id}`, 303);
+  if (result.ok) {
+    await setPublic(c.env.DB, result.repo.id, values.visibility === "public", Date.now());
+    return c.redirect(`/admin/repos/${result.repo.id}`, 303);
+  }
   return reposPage(c, { error: result.error, form: input.kind, values: result.clearUrl ? { ...values, url: "" } : values, restoreId: result.restoreId }, 422);
 }
 
@@ -60,13 +63,13 @@ adminRoutes.get("/", (c) => reposPage(c));
 
 adminRoutes.post("/repos", async (c) => {
   const b = await c.req.parseBody();
-  const values = { name: str(b.name), description: str(b.description), defaultBranch: str(b.defaultBranch) || "main" };
+  const values = { name: str(b.name), description: str(b.description), defaultBranch: str(b.defaultBranch) || "main", visibility: str(b.visibility) };
   return provision(c, { kind: "create", name: values.name, description: values.description, defaultBranch: values.defaultBranch }, values);
 });
 
 adminRoutes.post("/import", async (c) => {
   const b = await c.req.parseBody();
-  const values = { name: str(b.name), description: str(b.description), url: str(b.url), branch: str(b.branch) };
+  const values = { name: str(b.name), description: str(b.description), url: str(b.url), branch: str(b.branch), visibility: str(b.visibility) };
   return provision(c, { kind: "import", name: values.name, description: values.description, url: values.url, branch: values.branch }, values);
 });
 
