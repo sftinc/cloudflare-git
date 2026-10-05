@@ -261,17 +261,6 @@ export function AdminTokens(props: { tokens: (PushTokenRow & { repo_names: strin
           <GitSetup origin={props.origin} password={props.created} />
         </Secret>
       )}
-      <section class="card">
-        <h2>New token</h2>
-        <form method="post" action="/admin/tokens" class="stack">
-          <label>Name<input type="text" name="name" required placeholder="laptop" /></label>
-          <fieldset>
-            <legend>Limit to repos <span class="hint">none checked = all repos</span></legend>
-            {props.repos.map((r) => <label><input type="checkbox" name="repos" value={r.id} /> {r.name}</label>)}
-          </fieldset>
-          <button type="submit" class="primary">Create token</button>
-        </form>
-      </section>
       <div class="card table-scroll">
         <table class="list">
           <thead><tr><th>Name</th><th>Repos</th><th>Last used</th><th>Status</th><th></th></tr></thead>
@@ -292,6 +281,19 @@ export function AdminTokens(props: { tokens: (PushTokenRow & { repo_names: strin
           </tbody>
         </table>
       </div>
+      <section class="card">
+        <h2>New token</h2>
+        <form method="post" action="/admin/tokens" class="stack">
+          <label>Name<input type="text" name="name" required placeholder="laptop" /></label>
+          {props.repos.length > 0 && (
+            <fieldset>
+              <legend>Limit to repos <span class="hint">none checked = all repos</span></legend>
+              {props.repos.map((r) => <label><input type="checkbox" name="repos" value={r.id} /> {r.name}</label>)}
+            </fieldset>
+          )}
+          <button type="submit" class="primary">Create token</button>
+        </form>
+      </section>
     </>
   );
 }
