@@ -63,7 +63,7 @@ export function AdminRepos(props: { repos: RepoRow[]; pending: Set<string>; erro
         </table>
       </div>
       <div class="grid-2">
-        <section class="card">
+        <section class="card" id="new">
           <h2>Create an empty repo</h2>
           <form method="post" action="/admin/repos" class="stack">
             <label>Name<input type="text" name="name" required value={props.form === "create" ? v.name : ""} /></label>

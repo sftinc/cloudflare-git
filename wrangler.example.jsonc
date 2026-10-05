@@ -31,6 +31,10 @@
         "ACCESS_TEAM_DOMAIN": "REPLACE_ME.cloudflareaccess.com",
         "ACCESS_AUD": "REPLACE_ME",
         "SITE_ORIGIN": "https://git.example.com"
+        // Optional; leave out for the defaults (see README).
+        // "SITE_TITLE": "Cloudflare Git",
+        // "LOGO_URL": "https://example.com/logo.svg",
+        // "COMPANY_NAME": "Example Co."
       }
     }
   }

@@ -65,6 +65,17 @@ headless Chrome (`.e2e/screenshots/`), and deletes its repos at the end. It neve
    `env.production` also sets `workers_dev: false` and `preview_urls: false`, so the Worker answers
    only on the custom domain. Access guards only `git.example.com/admin`; the `workers.dev` and
    preview URLs would be unguarded paths to the same Worker (it still verifies the JWT regardless).
+   `SITE_ORIGIN` is optional: without it, URLs use the origin each request came in on.
+   Optional branding vars, all safe to leave out:
+
+   | Var | Default when unset or blank |
+   |---|---|
+   | `SITE_TITLE` | "Cloudflare Git" |
+   | `LOGO_URL` | The built-in logo. An https URL on another host is added to the page's CSP `img-src`. |
+   | `COMPANY_NAME` | No "© year name" line in the footer |
+
+   Without `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` nobody can log in: the site runs public-only and
+   logs a warning.
 3. Apply migrations, set the cookie secret, deploy:
    ```sh
    npx wrangler d1 migrations apply DB --remote --env production

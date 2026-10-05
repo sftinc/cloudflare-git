@@ -6,6 +6,7 @@ import { findLiveRepo, type RepoRow } from "../db/repos";
 import { highlightCode } from "../render/highlight";
 import { renderMarkdown } from "../render/markdown";
 import { decodePath, splitRefPath } from "../render/paths";
+import { siteOrigin } from "../lib/site";
 import { page } from "../views/layout";
 import { BlobView, Commits, EmptyRepo, Home, TreeView } from "../views/public";
 import { FileTooLarge } from "../views/errors";
@@ -22,7 +23,7 @@ async function load(c: Context<AppEnv>): Promise<Loaded | null> {
   const repo = await findLiveRepo(c.env.DB, c.req.param("repo")!);
   if (!repo || !(await canView(c.env.DB, await getViewer(c), repo, Date.now()))) return null;
   const { branches, head } = await listBranches(c.env.ARTIFACTS, repo.name);
-  return { repo, branches, head, cloneUrl: `${c.env.SITE_ORIGIN}/${repo.name}.git` };
+  return { repo, branches, head, cloneUrl: `${siteOrigin(c)}/${repo.name}.git` };
 }
 
 /** Decoded path after `/<repo>/<kind>/`, or null when malformed. */
@@ -61,8 +62,9 @@ async function renderTree(c: Context<AppEnv>, l: Loaded, branch: string, path: s
 }
 
 publicRoutes.get("/", async (c) => {
-  const repos = await visibleRepos(c.env.DB, await getViewer(c), Date.now());
-  return page(c, "Repositories", <Home repos={repos} />);
+  const viewer = await getViewer(c);
+  const repos = await visibleRepos(c.env.DB, viewer, Date.now());
+  return page(c, "Repositories", <Home repos={repos} owner={viewer.owner} />);
 });
 
 publicRoutes.get(`/:repo{${NAME}}`, async (c) => {

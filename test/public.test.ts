@@ -50,6 +50,7 @@ beforeEach(async () => {
 afterEach(() => vi.restoreAllMocks());
 
 const e = () => makeEnv({ ARTIFACTS: fake as unknown as Artifacts });
+const e2 = (vars: Record<string, string>) => makeEnv({ ARTIFACTS: fake as unknown as Artifacts, ...vars });
 const html = async (path: string, env = e(), headers: Record<string, string> = {}) => {
   const { res } = await request(path, { headers }, env);
   return { status: res.status, body: await res.text(), headers: res.headers };
@@ -61,10 +62,40 @@ describe("home", () => {
     expect(pub.body).toContain('href="/site"');
     expect(pub.body).not.toContain('href="/secret"');
     expect(pub.headers.get("content-security-policy")).toContain("default-src 'self'");
-    expect(pub.body).not.toContain("/admin");
+    expect(pub.body).toContain('<a href="/admin" class="btn icon-btn" aria-label="Log in"');
+    expect(pub.body).not.toContain("/admin#new");
+    expect(pub.body).not.toContain("/cdn-cgi/access/logout");
     expect(pub.body).toContain('<link rel="icon" href="/static/favicon.svg"'); // else browsers 404 on /favicon.ico
     const own = await html("/", await ownerEnv({ ARTIFACTS: fake }), { cookie: `CF_Authorization=${await ownerToken()}` });
     expect(own.body).toContain('href="/secret"');
+    expect(own.body).toContain('href="/admin#new"');
+    expect(own.body).toContain('href="/cdn-cgi/access/logout"');
+    expect(own.body).not.toContain('aria-label="Log in"');
+  });
+  it("uses defaults when the site vars are unset, and the vars when set", async () => {
+    const plain = await html("/");
+    expect(plain.body).toContain("<span>Cloudflare Git</span>");
+    expect(plain.body).toContain('<img src="/static/favicon.svg"');
+    expect(plain.body).not.toContain("©");
+    expect(plain.headers.get("content-security-policy")).toContain("img-src 'self';");
+    const branded = await html("/", e2({ SITE_TITLE: "Example Code", LOGO_URL: "https://cdn.example.com/logo.svg", COMPANY_NAME: "Example Co." }));
+    expect(branded.body).toContain("<span>Example Code</span>");
+    expect(branded.body).toContain('<img src="https://cdn.example.com/logo.svg"');
+    expect(branded.body).toContain(`© ${new Date().getFullYear()} Example Co.`);
+    expect(branded.headers.get("content-security-policy")).toContain("img-src 'self' https://cdn.example.com;");
+  });
+  it("without Access configured there is no Log in, and clone URLs use the request origin", async () => {
+    const r = await html("/", e2({ ACCESS_TEAM_DOMAIN: "", ACCESS_AUD: "" }));
+    expect(r.body).not.toContain('aria-label="Log in"');
+    expect((await html("/site", e2({ SITE_ORIGIN: "" }))).body).toContain("https://git.test/site.git");
+  });
+  it("shows an empty-state card", async () => {
+    await env.DB.prepare("UPDATE repos SET public_at = NULL").run();
+    const r = await html("/");
+    expect(r.body).toContain("No repositories to show");
+    expect(r.body).not.toContain("New repository");
+    const own = await html("/", await ownerEnv({ ARTIFACTS: fake }), { cookie: `CF_Authorization=${await ownerToken()}` });
+    expect(own.body).not.toContain("No repositories");
   });
 });
 
@@ -120,7 +151,7 @@ describe("files", () => {
   it("renders markdown with images as links, and shows source on request", async () => {
     const md = await html("/site/blob/main/docs/guide.md");
     expect(md.body).toContain("<h2>Guide</h2>");
-    expect(md.body).not.toContain("<img");
+    expect(md.body.split("<main")[1]).not.toContain("<img"); // the header logo is the only <img>
     expect(md.body).toContain('href="/site/blob/main/docs/img/d.png"');
     expect((await html("/site/blob/main/docs/guide.md?source=1")).body).toContain("## Guide");
   });

@@ -3,6 +3,7 @@ import type { AppEnv } from "../index";
 import { readInviteIds, writeInviteIds } from "../auth/invite-cookie";
 import { findInviteByCodeHash, isRedeemable, redeemInvite, reposForInvite } from "../db/invites";
 import { randomSecret, sha256Hex } from "../lib/crypto";
+import { siteOrigin } from "../lib/site";
 import { page } from "../views/layout";
 import { InviteInvalid } from "../views/errors";
 import { InviteAccepted, InviteConfirm, cloneUrlWithPassword } from "../views/invite";
@@ -18,7 +19,7 @@ inviteRoutes.get("/:code", async (c) => {
 
 // POST redeems, so link previews in chat apps can't use up the invite.
 inviteRoutes.post("/:code", async (c) => {
-  if (c.req.header("origin") !== c.env.SITE_ORIGIN) return c.text("Forbidden", 403);
+  if (c.req.header("origin") !== siteOrigin(c)) return c.text("Forbidden", 403);
   c.header("Cache-Control", "no-store"); // the accepted page shows a clone password
   const now = Date.now();
   const inv = await findInviteByCodeHash(c.env.DB, await sha256Hex(c.req.param("code")));
@@ -28,6 +29,6 @@ inviteRoutes.post("/:code", async (c) => {
   }
   await writeInviteIds(c, [...new Set([...(await readInviteIds(c)), inv.id])]);
   const repos = await reposForInvite(c.env.DB, inv.id);
-  const urls = Object.fromEntries(repos.map((r) => [r.name, cloneUrlWithPassword(c.env.SITE_ORIGIN, r.name, password)]));
+  const urls = Object.fromEntries(repos.map((r) => [r.name, cloneUrlWithPassword(siteOrigin(c), r.name, password)]));
   return page(c, "Invite accepted", <InviteAccepted repos={repos} urls={urls} />);
 });

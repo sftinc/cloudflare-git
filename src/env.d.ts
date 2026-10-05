@@ -1,6 +1,11 @@
-// Optional secret not emitted by `wrangler types` (see .dev.vars.example).
+// Optional secret and vars not emitted by `wrangler types` (see .dev.vars.example and wrangler.example.jsonc).
+interface OptionalVars {
+  ACCESS_JWKS?: string;
+  SITE_TITLE?: string;
+  LOGO_URL?: string;
+  COMPANY_NAME?: string;
+}
+interface Env extends OptionalVars {}
 declare namespace Cloudflare {
-  interface Env {
-    ACCESS_JWKS?: string;
-  }
+  interface Env extends OptionalVars {}
 }

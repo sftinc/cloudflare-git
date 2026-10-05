@@ -1,24 +1,49 @@
 import { raw } from "hono/html";
 import type { RepoRow } from "../db/repos";
 import { blobHref, commitsHref, treeHref } from "../render/paths";
+import { Book, Branch, Chevron, Clock, Copy, File, Folder, Plus } from "./icons";
 
 export const fmtDate = (sec: number) => new Date(sec * 1000).toISOString().slice(0, 10);
 export const fmtSize = (n: number) => (n < 1024 ? `${n} B` : n < 1_048_576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1_048_576).toFixed(1)} MB`);
+const fmtDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 const firstLine = (s: string) => s.split("\n", 1)[0];
 
-export function Home(props: { repos: RepoRow[] }) {
+export function Home(props: { repos: RepoRow[]; owner: boolean }) {
   return (
     <>
-      <h1 class="page-title">Repositories</h1>
+      <div class="page-head">
+        <h1 class="page-title">Repositories</h1>
+        <span class="muted">{props.repos.length}</span>
+      </div>
       {props.repos.length === 0 ? (
-        <p class="muted">No repositories to show.</p>
+        <section class="card empty">
+          <span class="empty-icon"><Book /></span>
+          {props.owner ? (
+            <>
+              <h2>No repositories yet</h2>
+              <p class="muted">Create an empty repository to push to, or import one from another host.</p>
+              <a href="/admin#new" class="btn primary"><Plus /> New repository</a>
+            </>
+          ) : (
+            <>
+              <h2>No repositories to show</h2>
+              <p class="muted">There are no public repositories here yet. If you have an invite link, open it to see the repositories it covers.</p>
+            </>
+          )}
+        </section>
       ) : (
-        <ul class="repo-list">
+        <ul class="repo-grid">
           {props.repos.map((r) => (
             <li>
-              <a href={`/${r.name}`} class="repo-name">{r.name}</a>
-              {r.public_at === null && <span class="badge">Private</span>}
-              {r.description && <p class="muted">{r.description}</p>}
+              <a href={`/${r.name}`} class="repo-card">
+                <span class="repo-card-head">
+                  <Book />
+                  <span class="repo-name">{r.name}</span>
+                  {r.public_at === null && <span class="badge">Private</span>}
+                </span>
+                {r.description && <span class="muted repo-desc">{r.description}</span>}
+                <span class="muted repo-updated">Updated {fmtDay(r.updated_at)}</span>
+              </a>
             </li>
           ))}
         </ul>
@@ -32,7 +57,7 @@ export function CloneBox(props: { url: string }) {
     <div class="clone">
       <span class="clone-label">Clone</span>
       <code>{props.url}</code>
-      <button type="button" class="btn" data-copy={props.url}>Copy</button>
+      <button type="button" class="btn" data-copy={props.url}><Copy /> Copy</button>
     </div>
   );
 }
@@ -42,7 +67,7 @@ function RepoHeader(props: { repo: RepoRow; cloneUrl: string }) {
     <div class="repo-head">
       <h1 class="page-title">
         <a href={`/${props.repo.name}`}>{props.repo.name}</a>
-        {props.repo.public_at === null && <span class="badge">Private</span>}
+        {props.repo.public_at === null ? <span class="badge">Private</span> : <span class="badge ok">Public</span>}
       </h1>
       {props.repo.description && <p class="muted">{props.repo.description}</p>}
       <CloneBox url={props.cloneUrl} />
@@ -54,7 +79,7 @@ function BranchSwitcher(props: { branches: string[]; current: string; href: (b: 
   return (
     <details class="branches">
       <summary>
-        <span class="muted">Branch</span> <strong>{props.current}</strong>
+        <Branch /> <strong>{props.current}</strong> <Chevron />
       </summary>
       <ul>
         {props.branches.map((b) => (
@@ -107,7 +132,7 @@ export function TreeView(props: {
       <div class="toolbar">
         <BranchSwitcher branches={props.branches} current={branch} href={(b) => treeHref(repo.name, b)} />
         <Crumbs repo={repo.name} branch={branch} path={path} />
-        <a class="toolbar-link" href={commitsHref(repo.name, branch)}>Commits</a>
+        <a class="toolbar-link" href={commitsHref(repo.name, branch)}><Clock /> Commits</a>
       </div>
       <div class="card files">
         <div class="last-commit">
@@ -117,23 +142,28 @@ export function TreeView(props: {
         <ul class="entries">
           {path && (
             <li>
-              <a href={treeHref(repo.name, branch, path.split("/").slice(0, -1).join("/"))} class="entry dir">..</a>
+              <a href={treeHref(repo.name, branch, path.split("/").slice(0, -1).join("/"))} class="entry dir"><Folder />..</a>
             </li>
           )}
           {props.entries.map((e) => (
             <li>
               {e.type === "tree" ? (
-                <a class="entry dir" href={treeHref(repo.name, branch, child(e.name))}>{e.name}</a>
+                <a class="entry dir" href={treeHref(repo.name, branch, child(e.name))}><Folder />{e.name}</a>
               ) : e.type === "gitlink" ? (
-                <span class="entry submodule">{e.name} <span class="muted">(submodule)</span></span>
+                <span class="entry submodule"><Folder />{e.name} <span class="muted">(submodule)</span></span>
               ) : (
-                <a class="entry file" href={blobHref(repo.name, branch, child(e.name))}>{e.name}</a>
+                <a class="entry file" href={blobHref(repo.name, branch, child(e.name))}><File />{e.name}</a>
               )}
             </li>
           ))}
         </ul>
       </div>
-      {props.readme !== null && <article class="card markdown">{raw(props.readme)}</article>}
+      {props.readme !== null && (
+        <section class="card">
+          <div class="file-head readme-head"><span><Book /> README</span></div>
+          <article class="markdown">{raw(props.readme)}</article>
+        </section>
+      )}
     </>
   );
 }
@@ -182,7 +212,7 @@ export function Commits(props: {
       <RepoHeader repo={repo} cloneUrl={props.cloneUrl} />
       <div class="toolbar">
         <BranchSwitcher branches={props.branches} current={branch} href={(b) => commitsHref(repo.name, b)} />
-        <a class="toolbar-link" href={treeHref(repo.name, branch)}>Files</a>
+        <a class="toolbar-link" href={treeHref(repo.name, branch)}><Folder /> Files</a>
       </div>
       <ul class="card commits">
         {props.commits.map((c) => (

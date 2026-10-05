@@ -10,6 +10,7 @@ const enc = new TextEncoder();
 let keys = new Map<string, CryptoKey>();
 let lastLoadAt = -Infinity;
 let loading: Promise<void> | null = null;
+let warnedUnconfigured = false;
 
 export function resetAccessKeys() {
   keys = new Map();
@@ -49,6 +50,11 @@ function decodeJson(part: string): Record<string, unknown> | null {
 
 /** True only for a validly signed, current Access JWT for this app's issuer and audience. The email is not checked: the Access policy decides who is admin. */
 export async function verifyAccessJwt(token: string, env: AccessEnv, now: number = Date.now()): Promise<boolean> {
+  if (!env.ACCESS_TEAM_DOMAIN || !env.ACCESS_AUD) {
+    if (!warnedUnconfigured) console.warn(JSON.stringify({ msg: "Access not configured: ACCESS_TEAM_DOMAIN and ACCESS_AUD are required to log in" }));
+    warnedUnconfigured = true;
+    return false;
+  }
   const parts = token.split(".");
   if (parts.length !== 3) return false;
   const header = decodeJson(parts[0]);

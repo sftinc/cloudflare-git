@@ -7,6 +7,7 @@ import { createPushToken, deletePushToken, listPushTokens, revokePushToken } fro
 import { createWebhook, deleteWebhook, listWebhooks } from "../db/webhooks";
 import { randomSecret, sha256Hex } from "../lib/crypto";
 import { provisionRepo, refreshProvisioning, type ProvisionInput, type ProvisionStatus } from "../provision";
+import { siteOrigin } from "../lib/site";
 import { page } from "../views/layout";
 import { ACCESS_LENGTHS, AdminInvites, AdminRepo, AdminRepos, AdminTokens, REDEEM_WINDOWS, type RepoFormValues } from "../views/admin";
 
@@ -21,7 +22,7 @@ adminRoutes.use("*", async (c, next) => {
     ok = false; // certs fetch failed: not authorized
   }
   if (!ok) return c.notFound();
-  if (c.req.method === "POST" && c.req.header("origin") !== c.env.SITE_ORIGIN) return c.text("Forbidden", 403);
+  if (c.req.method === "POST" && c.req.header("origin") !== siteOrigin(c)) return c.text("Forbidden", 403);
   await next();
   c.res.headers.set("Cache-Control", "no-store"); // pages show secrets
 });
@@ -78,7 +79,7 @@ async function repoPage(c: Context<AppEnv>, extra: { secret?: { title: string; v
     if (s === "ready") repo.provisioned_at = Date.now();
   }
   const hooks = await listWebhooks(c.env.DB, repo.id);
-  return admin(c, `${repo.name} · admin`, <AdminRepo repo={repo} status={s} origin={c.env.SITE_ORIGIN} hooks={hooks} {...extra} />, status);
+  return admin(c, `${repo.name} · admin`, <AdminRepo repo={repo} status={s} origin={siteOrigin(c)} hooks={hooks} {...extra} />, status);
 }
 
 adminRoutes.get("/repos/:id", (c) => repoPage(c));
@@ -157,7 +158,7 @@ adminRoutes.post("/invites", async (c) => {
   const code = randomSecret();
   const now = Date.now();
   await createInvite(c.env.DB, { label, codeHash: await sha256Hex(code), accessMs: ACCESS_LENGTHS[access], redeemByAt: now + redeem, repoIds }, now);
-  return invitesPage(c, { link: `${c.env.SITE_ORIGIN}/invite/${code}` });
+  return invitesPage(c, { link: `${siteOrigin(c)}/invite/${code}` });
 });
 
 adminRoutes.post("/invites/:id/revoke", async (c) => {
@@ -171,7 +172,7 @@ adminRoutes.post("/invites/:id/delete", async (c) => {
 });
 
 async function tokensPage(c: Context<AppEnv>, extra: { created?: string; error?: string } = {}, status = 200) {
-  return admin(c, "Push tokens · admin", <AdminTokens tokens={await listPushTokens(c.env.DB)} repos={await listLiveRepos(c.env.DB)} origin={c.env.SITE_ORIGIN} {...extra} />, status);
+  return admin(c, "Push tokens · admin", <AdminTokens tokens={await listPushTokens(c.env.DB)} repos={await listLiveRepos(c.env.DB)} origin={siteOrigin(c)} {...extra} />, status);
 }
 
 adminRoutes.get("/tokens", (c) => tokensPage(c));
