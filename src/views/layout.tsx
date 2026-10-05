@@ -37,7 +37,7 @@ export function Layout(props: { title: string; env: Env; admin?: boolean; owner?
       <body>
         <header class="site">
           <div class="wrap">
-            <a href={props.admin ? "/admin" : "/"} class="brand">
+            <a href="/" class="brand">
               <img src={env.LOGO_URL || "/static/favicon.svg"} alt="" width="28" height="28" />
               <span>{env.SITE_TITLE || "Cloudflare Git"}</span>
             </a>
@@ -46,7 +46,6 @@ export function Layout(props: { title: string; env: Env; admin?: boolean; owner?
                 <a href="/admin">Repos</a>
                 <a href="/admin/invites">Invites</a>
                 <a href="/admin/tokens">Push tokens</a>
-                <a href="/">Public site</a>
               </nav>
             )}
             <div class="site-actions">
