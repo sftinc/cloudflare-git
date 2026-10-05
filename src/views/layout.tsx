@@ -50,7 +50,7 @@ export function Layout(props: { title: string; env: Env; admin?: boolean; owner?
             )}
             <div class="site-actions">
               {owner && (
-                <a href="/admin#new" class="btn primary icon-btn" aria-label="New repository" title="New repository">
+                <a href="/admin/new" class="btn primary icon-btn" aria-label="New repository" title="New repository">
                   <Plus /><span class="label">New</span>
                 </a>
               )}

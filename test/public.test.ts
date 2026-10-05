@@ -63,12 +63,12 @@ describe("home", () => {
     expect(pub.body).not.toContain('href="/secret"');
     expect(pub.headers.get("content-security-policy")).toContain("default-src 'self'");
     expect(pub.body).toContain('<a href="/admin" class="btn icon-btn" aria-label="Log in"');
-    expect(pub.body).not.toContain("/admin#new");
+    expect(pub.body).not.toContain("/admin/new");
     expect(pub.body).not.toContain("/cdn-cgi/access/logout");
     expect(pub.body).toContain('<link rel="icon" href="/static/favicon.svg"'); // else browsers 404 on /favicon.ico
     const own = await html("/", await ownerEnv({ ARTIFACTS: fake }), { cookie: `CF_Authorization=${await ownerToken()}` });
     expect(own.body).toContain('href="/secret"');
-    expect(own.body).toContain('href="/admin#new"');
+    expect(own.body).toContain('href="/admin/new"');
     expect(own.body).toContain('href="/cdn-cgi/access/logout"');
     expect(own.body).not.toContain('aria-label="Log in"');
   });

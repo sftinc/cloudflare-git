@@ -2,7 +2,8 @@ import type { RepoRow } from "../db/repos";
 import type { InviteRow } from "../db/invites";
 import type { PushTokenRow } from "../db/tokens";
 import type { WebhookRow } from "../db/webhooks";
-import { fmtDate } from "./public";
+import { fmtDate, NO_REPOS_OWNER } from "./public";
+import { Book, Download, Plus } from "./icons";
 
 const day = (ms: number) => fmtDate(Math.floor(ms / 1000));
 
@@ -45,18 +46,19 @@ function VisibilitySelect(props: { private: boolean }) {
   );
 }
 
-export function AdminRepos(props: { repos: RepoRow[]; pending: Set<string>; error?: string; form?: "create" | "import"; values?: RepoFormValues; restoreId?: string }) {
-  const v = props.values ?? {};
+export function AdminRepos(props: { repos: RepoRow[]; pending: Set<string> }) {
   const live = props.repos.filter((r) => r.deleted_at === null);
   const deleted = props.repos.filter((r) => r.deleted_at !== null);
   return (
     <>
       <h1 class="page-title">Repositories</h1>
-      {props.error && (
-        <div class="error">
-          {props.error} {props.restoreId && <Post action={`/admin/repos/${props.restoreId}/restore`} label="Restore it" class="link" />}
-        </div>
-      )}
+      {live.length === 0 ? (
+        <section class="card empty">
+          <span class="empty-icon"><Book /></span>
+          <h2>No repositories yet</h2>
+          <p class="muted">{NO_REPOS_OWNER}</p>
+        </section>
+      ) : (
       <div class="card table-scroll">
         <table class="list">
           <thead><tr><th>Name</th><th>State</th><th>Created</th><th></th></tr></thead>
@@ -69,34 +71,10 @@ export function AdminRepos(props: { repos: RepoRow[]; pending: Set<string>; erro
                 <td>{r.provisioned_at !== null && <a href={`/${r.name}`}>View</a>}</td>
               </tr>
             ))}
-            {live.length === 0 && <tr><td colspan={4} class="muted">No repositories yet.</td></tr>}
           </tbody>
         </table>
       </div>
-      <div class="grid-2">
-        <section class="card" id="new">
-          <h2>Create an empty repo</h2>
-          <form method="post" action="/admin/repos" class="stack">
-            <label>Name <span class="hint">lowercase letters, digits, hyphens</span><input type="text" name="name" required pattern="[a-z0-9][a-z0-9\-]{1,62}" title="2-63 lowercase letters, digits or hyphens, starting with a letter or digit" value={props.form === "create" ? v.name : ""} /></label>
-            <label>Description <span class="hint">optional</span><input type="text" name="description" value={props.form === "create" ? v.description : ""} /></label>
-            <label>Default branch<input type="text" name="defaultBranch" value={props.form === "create" ? v.defaultBranch || "main" : "main"} /></label>
-            <VisibilitySelect private={props.form === "create" && v.visibility === "private"} />
-            <button type="submit" class="primary">Create</button>
-          </form>
-        </section>
-        <section class="card">
-          <h2>Import from a public URL</h2>
-          <form method="post" action="/admin/import" class="stack">
-            <label>Name <span class="hint">lowercase letters, digits, hyphens</span><input type="text" name="name" required pattern="[a-z0-9][a-z0-9\-]{1,62}" title="2-63 lowercase letters, digits or hyphens, starting with a letter or digit" value={props.form === "import" ? v.name : ""} /></label>
-            <label>Source URL<input type="url" name="url" required placeholder="https://github.com/you/repo" value={props.form === "import" ? v.url : ""} /></label>
-            <label>Branch <span class="hint">optional, defaults to the source's default</span><input type="text" name="branch" value={props.form === "import" ? v.branch : ""} /></label>
-            <p class="hint">Imports one branch and no tags. For every branch and tag, create an empty repo and push a mirror (see README).</p>
-            <label>Description <span class="hint">optional</span><input type="text" name="description" value={props.form === "import" ? v.description : ""} /></label>
-            <VisibilitySelect private={props.form === "import" && v.visibility === "private"} />
-            <button type="submit" class="primary">Import</button>
-          </form>
-        </section>
-      </div>
+      )}
       {deleted.length > 0 && (
         <section class="card table-scroll">
           <h2>Deleted</h2>
@@ -110,6 +88,56 @@ export function AdminRepos(props: { repos: RepoRow[]; pending: Set<string>; erro
         </section>
       )}
     </>
+  );
+}
+
+const NAME_INPUT = { type: "text", name: "name", required: true, pattern: "[a-z0-9][a-z0-9\\-]{1,62}", title: "2-63 lowercase letters, digits or hyphens, starting with a letter or digit" };
+
+export function AdminNewRepo(props: { kind: "create" | "import"; error?: string; values?: RepoFormValues; restoreId?: string }) {
+  const v = props.values ?? {};
+  const create = props.kind === "create";
+  const name = <label>Name <span class="hint">lowercase letters, digits, hyphens</span><input {...NAME_INPUT} value={v.name ?? ""} /></label>;
+  const description = <label>Description <span class="hint">optional</span><input type="text" name="description" value={v.description ?? ""} /></label>;
+  return (
+    <div class="new-repo">
+      <h1 class="page-title">New repository</h1>
+      <nav class="source-pick" aria-label="Start from">
+        <a href="/admin/new" aria-current={create ? "page" : undefined}>
+          <span class="pick-icon"><Plus /></span>
+          <span><strong>Empty</strong><span class="muted">Push your code to a new repository.</span></span>
+        </a>
+        <a href="/admin/new?from=import" aria-current={create ? undefined : "page"}>
+          <span class="pick-icon"><Download /></span>
+          <span><strong>Import</strong><span class="muted">Copy one branch from a public URL.</span></span>
+        </a>
+      </nav>
+      {props.error && (
+        <div class="error">
+          {props.error} {props.restoreId && <Post action={`/admin/repos/${props.restoreId}/restore`} label="Restore it" class="link" />}
+        </div>
+      )}
+      <section class="card">
+        {create ? (
+          <form method="post" action="/admin/repos" class="stack">
+            {name}
+            {description}
+            <label>Default branch<input type="text" name="defaultBranch" value={v.defaultBranch || "main"} /></label>
+            <VisibilitySelect private={v.visibility === "private"} />
+            <button type="submit" class="primary">Create repository</button>
+          </form>
+        ) : (
+          <form method="post" action="/admin/import" class="stack">
+            <label>Source URL<input type="url" name="url" required placeholder="https://github.com/you/repo" value={v.url ?? ""} /></label>
+            <label>Branch <span class="hint">optional, defaults to the source's default</span><input type="text" name="branch" value={v.branch ?? ""} /></label>
+            <p class="hint">Imports one branch and no tags. For every branch and tag, create an empty repository and push a mirror (see README).</p>
+            {name}
+            {description}
+            <VisibilitySelect private={v.visibility === "private"} />
+            <button type="submit" class="primary">Import repository</button>
+          </form>
+        )}
+      </section>
+    </div>
   );
 }
 

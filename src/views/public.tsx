@@ -1,7 +1,9 @@
 import { raw } from "hono/html";
 import type { RepoRow } from "../db/repos";
 import { blobHref, commitsHref, treeHref } from "../render/paths";
-import { Book, Branch, Chevron, Clock, Copy, File, Folder, Plus } from "./icons";
+import { Book, Branch, Chevron, Clock, Copy, File, Folder } from "./icons";
+
+export const NO_REPOS_OWNER = "Create an empty repository to push to, or import one from another host.";
 
 export const fmtDate = (sec: number) => new Date(sec * 1000).toISOString().slice(0, 10);
 export const fmtSize = (n: number) => (n < 1024 ? `${n} B` : n < 1_048_576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1_048_576).toFixed(1)} MB`);
@@ -21,8 +23,7 @@ export function Home(props: { repos: RepoRow[]; owner: boolean }) {
           {props.owner ? (
             <>
               <h2>No repositories yet</h2>
-              <p class="muted">Create an empty repository to push to, or import one from another host.</p>
-              <a href="/admin#new" class="btn primary"><Plus /> New repository</a>
+              <p class="muted">{NO_REPOS_OWNER}</p>
             </>
           ) : (
             <>

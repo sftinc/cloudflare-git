@@ -9,7 +9,7 @@ import { randomSecret, sha256Hex } from "../lib/crypto";
 import { provisionRepo, refreshProvisioning, type ProvisionInput, type ProvisionStatus } from "../provision";
 import { siteOrigin } from "../lib/site";
 import { page } from "../views/layout";
-import { ACCESS_LENGTHS, AdminInvites, AdminRepo, AdminRepos, AdminTokens, REDEEM_WINDOWS, type RepoFormValues } from "../views/admin";
+import { ACCESS_LENGTHS, AdminInvites, AdminNewRepo, AdminRepo, AdminRepos, AdminTokens, REDEEM_WINDOWS, type RepoFormValues } from "../views/admin";
 
 export const adminRoutes = new Hono<AppEnv>();
 
@@ -31,7 +31,7 @@ const admin = (c: Context<AppEnv>, title: string, body: unknown, status = 200) =
 const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 const list = (v: unknown) => (Array.isArray(v) ? v : v === undefined ? [] : [v]).filter((x): x is string => typeof x === "string");
 
-async function reposPage(c: Context<AppEnv>, extra: { error?: string; form?: "create" | "import"; values?: RepoFormValues; restoreId?: string } = {}, status = 200) {
+async function reposPage(c: Context<AppEnv>) {
   const now = Date.now();
   const repos = await listReposForAdmin(c.env.DB);
   const pending = new Set<string>();
@@ -47,7 +47,7 @@ async function reposPage(c: Context<AppEnv>, extra: { error?: string; form?: "cr
       }
     }
   }
-  return admin(c, "Repositories · admin", <AdminRepos repos={repos} pending={pending} {...extra} />, status);
+  return admin(c, "Repositories · admin", <AdminRepos repos={repos} pending={pending} />);
 }
 
 async function provision(c: Context<AppEnv>, input: ProvisionInput, values: RepoFormValues) {
@@ -56,10 +56,11 @@ async function provision(c: Context<AppEnv>, input: ProvisionInput, values: Repo
     await setPublic(c.env.DB, result.repo.id, values.visibility === "public", Date.now());
     return c.redirect(`/admin/repos/${result.repo.id}`, 303);
   }
-  return reposPage(c, { error: result.error, form: input.kind, values: result.clearUrl ? { ...values, url: "" } : values, restoreId: result.restoreId }, 422);
+  return admin(c, "New repository · admin", <AdminNewRepo kind={input.kind} error={result.error} values={result.clearUrl ? { ...values, url: "" } : values} restoreId={result.restoreId} />, 422);
 }
 
 adminRoutes.get("/", (c) => reposPage(c));
+adminRoutes.get("/new", (c) => admin(c, "New repository · admin", <AdminNewRepo kind={c.req.query("from") === "import" ? "import" : "create"} />));
 
 adminRoutes.post("/repos", async (c) => {
   const b = await c.req.parseBody();

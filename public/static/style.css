@@ -85,6 +85,19 @@ footer.site .wrap { display: flex; justify-content: space-between; gap: 12px; fl
 .card.empty > h2, .card.empty > p { margin: 0; }
 .card.empty > p { max-width: 360px; font-size: 14px; }
 .card.empty .btn { margin-top: 8px; }
+.new-repo { max-width: 640px; }
+.new-repo form.stack { max-width: none; }
+.source-pick { display: grid; grid-template-columns: 1fr 1fr; margin: 4px 0 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.source-pick a { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; color: var(--text); }
+.source-pick a + a { border-left: 1px solid var(--border); }
+.source-pick a:hover { text-decoration: none; background: var(--code-bg); }
+.source-pick a:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.source-pick a[aria-current] { box-shadow: inset 0 0 0 2px var(--accent); border-radius: 12px; }
+.source-pick strong { display: block; font-size: 15px; }
+.source-pick .muted { display: block; font-size: 13px; line-height: 1.4; }
+.pick-icon { flex: none; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 10px; background: var(--badge-bg); color: var(--muted); }
+.pick-icon .icon { width: 18px; height: 18px; }
+.source-pick a[aria-current] .pick-icon { background: var(--accent); color: var(--accent-text); }
 .empty-icon { display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: 12px; background: var(--badge-bg); color: var(--muted); }
 .empty-icon .icon { width: 24px; height: 24px; }
 
@@ -179,6 +192,8 @@ fieldset label { display: flex !important; align-items: center; gap: 8px; font-w
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 @media (max-width: 720px) {
   .grid-2, .repo-grid { grid-template-columns: 1fr; }
+  .source-pick { grid-template-columns: 1fr; }
+  .source-pick a + a { border-left: 0; border-top: 1px solid var(--border); }
   header.site .wrap { flex-wrap: wrap; padding-top: 8px; padding-bottom: 8px; }
   .site-actions { gap: 4px; }
   .site-actions .icon-btn { width: 44px; height: 44px; padding: 0; }

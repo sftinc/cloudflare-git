@@ -53,10 +53,12 @@ describe("admin auth", () => {
   it("rejects cross-origin POSTs", async () => {
     expect((await call("POST", "/admin/repos", { name: "x1" }, { Origin: "https://evil.test" })).status).toBe(403);
   });
-  it("renders the admin nav", async () => {
+  it("renders the admin nav and, with no repos yet, the empty state", async () => {
     const r = await call("GET", "/admin");
     expect(r.status).toBe(200);
     expect(r.html).toContain('href="/admin/invites"');
+    expect(r.html).toContain("No repositories yet");
+    expect(r.html).not.toContain('action="/admin/repos"');
   });
 });
 
@@ -75,12 +77,15 @@ describe("repos", () => {
     expect(r.html).toContain('value="flaky"');
     expect(r.html).toContain('value="keep me"');
     expect(r.html).toContain('value="trunk"');
-    expect(r.html).toContain("Not created");
+    expect((await call("GET", "/admin")).html).toContain("Not created");
     expect((await call("POST", "/admin/repos", { name: "flaky", defaultBranch: "trunk" })).status).toBe(303);
   });
   it("sets visibility from the form, private unless public is chosen", async () => {
-    const form = (await call("GET", "/admin")).html;
+    const form = (await call("GET", "/admin/new")).html;
     expect(form).toMatch(/<option value="public" selected/);
+    expect(form).toContain('action="/admin/repos"');
+    expect(form).not.toContain('action="/admin/import"');
+    expect((await call("GET", "/admin/new?from=import")).html).toContain('action="/admin/import"');
     const pub = (await call("POST", "/admin/repos", { name: "pub", visibility: "public" })).location!.split("/").pop()!;
     expect((await repos.findRepoById(env.DB, pub))!.public_at).not.toBeNull();
     const priv = (await call("POST", "/admin/repos", { name: "priv", visibility: "private" })).location!.split("/").pop()!;
