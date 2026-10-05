@@ -35,7 +35,7 @@ export function resolveRelative(dir: string, target: string): string | null {
 /** Every repo lives under /r/, so repo names never collide with app routes. */
 export const repoHref = (repo: string) => `/r/${repo}`;
 export const cloneUrl = (origin: string, repo: string) => `${origin}/r/${repo}.git`;
-/** Saves a password for this host in whatever credential store git uses (Keychain, GCM, libsecret). */
+/** Saves a password for this host in whatever credential store git uses (Keychain on macOS, Git Credential Manager on Windows). */
 export function gitLoginCommand(origin: string, password: string) {
   const u = new URL(origin);
   return `printf 'protocol=${u.protocol.slice(0, -1)}\\nhost=${u.host}\\nusername=x\\npassword=${password}\\n' | git credential approve`;
