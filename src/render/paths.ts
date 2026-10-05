@@ -35,10 +35,13 @@ export function resolveRelative(dir: string, target: string): string | null {
 /** Every repo lives under /r/, so repo names never collide with app routes. */
 export const repoHref = (repo: string) => `/r/${repo}`;
 export const cloneUrl = (origin: string, repo: string) => `${origin}/r/${repo}.git`;
-/** Saves a password for this host in whatever credential store git uses (Keychain on macOS, Git Credential Manager on Windows). */
+/**
+ * Saves a password for this host in git's credential store (Keychain on macOS, Git Credential Manager on Windows).
+ * One line that runs the same in zsh, bash, PowerShell and cmd; no space before "|" or cmd adds it to the password.
+ */
 export function gitLoginCommand(origin: string, password: string) {
   const u = new URL(origin);
-  return `printf 'protocol=${u.protocol.slice(0, -1)}\\nhost=${u.host}\\nusername=x\\npassword=${password}\\n' | git credential approve`;
+  return `echo url=${u.protocol}//x:${password}@${u.host}|git credential approve`;
 }
 export const treeHref = (repo: string, branch: string, path = "") =>
   `${repoHref(repo)}/tree/${encodePath(branch)}${path ? `/${encodePath(path)}` : ""}`;

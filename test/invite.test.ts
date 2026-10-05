@@ -63,7 +63,7 @@ describe("invites", () => {
     expect(res.headers.get("cache-control")).toBe("no-store");
     const cookie = res.headers.get("set-cookie")!.split(";")[0];
     expect(cookie).toMatch(/^cg_invites=/);
-    const m = /host=git\.test\\nusername=x\\npassword=([A-Za-z0-9_-]{43})\\n.{0,8} \| git credential approve/.exec(body);
+    const m = /echo url=https:\/\/x:([A-Za-z0-9_-]{43})@git\.test\|git credential approve/.exec(body);
     expect(m).not.toBeNull();
     expect(body).toContain("git clone https://git.test/r/secret.git");
 
