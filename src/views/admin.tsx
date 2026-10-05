@@ -259,7 +259,6 @@ export function AdminTokens(props: { tokens: (PushTokenRow & { repo_names: strin
       {props.created && (
         <Secret title="New push token" value={props.created}>
           <GitSetup origin={props.origin} password={props.created} />
-          <p class="muted">For CI, set <code>GIT_PUSH_TOKEN</code> and run <code>git config --global credential.helper '!f() {"{"} echo username=x; echo password=$GIT_PUSH_TOKEN; {"}"}; f'</code>.</p>
         </Secret>
       )}
       <section class="card">
