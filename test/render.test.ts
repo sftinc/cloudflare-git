@@ -17,16 +17,16 @@ describe("markdown", () => {
   });
   it("rewrites relative links to blob URLs and keeps absolute ones", () => {
     const out = renderMarkdown("[a](guide.md) [b](../README.md#top) [c](/src/x.ts) [d](https://example.com) [e](#anchor)", ctx);
-    expect(out).toContain('href="/site/blob/feature/x/docs/guide.md"');
-    expect(out).toContain('href="/site/blob/feature/x/README.md#top"');
-    expect(out).toContain('href="/site/blob/feature/x/src/x.ts"');
+    expect(out).toContain('href="/r/site/blob/feature/x/docs/guide.md"');
+    expect(out).toContain('href="/r/site/blob/feature/x/README.md#top"');
+    expect(out).toContain('href="/r/site/blob/feature/x/src/x.ts"');
     expect(out).toContain('href="https://example.com"');
     expect(out).toContain('href="#anchor"');
   });
   it("renders images as alt text plus a link, never <img>", () => {
     const out = renderMarkdown("![Logo](img/logo.png)", ctx);
     expect(out).not.toContain("<img");
-    expect(out).toContain('href="/site/blob/feature/x/docs/img/logo.png"');
+    expect(out).toContain('href="/r/site/blob/feature/x/docs/img/logo.png"');
     expect(out).toContain("Logo");
   });
   it("aligns table columns with classes, not inline styles (CSP blocks style attributes)", () => {
@@ -48,8 +48,8 @@ describe("highlight", () => {
 describe("paths", () => {
   it("encodes each segment", () => {
     expect(encodePath("docs/my file #1?.md")).toBe("docs/my%20file%20%231%3F.md");
-    expect(blobHref("site", "feature/x", "a b.txt")).toBe("/site/blob/feature/x/a%20b.txt");
-    expect(treeHref("site", "main")).toBe("/site/tree/main");
+    expect(blobHref("site", "feature/x", "a b.txt")).toBe("/r/site/blob/feature/x/a%20b.txt");
+    expect(treeHref("site", "main")).toBe("/r/site/tree/main");
     expect(decodePath("docs/%E2%9C%93%20ok")).toBe("docs/✓ ok");
     expect(decodePath("bad%E0%A4%A")).toBeNull();
   });

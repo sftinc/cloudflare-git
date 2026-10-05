@@ -8,7 +8,7 @@ const art = (f: FakeArtifacts) => f as unknown as Artifacts;
 const create = (name: string) => ({ kind: "create" as const, name, description: "", defaultBranch: "main" });
 
 describe("validateRepoName", () => {
-  it.each([["site", null], ["a", "x"], ["Site", "x"], ["-site", "x"], ["admin", "x"], ["invite", "x"], ["static", "x"], ["my.repo", "x"], ["a".repeat(64), "x"]])(
+  it.each([["site", null], ["a", "x"], ["Site", "x"], ["-site", "x"], ["admin", null], ["invite", null], ["static", null], ["my.repo", "x"], ["a".repeat(64), "x"]])(
     "%s", (name, ok) => expect(validateRepoName(name) === null).toBe(ok === null),
   );
 });
@@ -41,7 +41,7 @@ describe("provisionRepo", () => {
     expect(r.ok && r.status).toBe("ready");
   });
 
-  it("rejects names used by provisioned or deleted repos, and reserved names", async () => {
+  it("rejects names used by provisioned or deleted repos", async () => {
     const f = new FakeArtifacts();
     await provisionRepo(env.DB, art(f), create("p4"), 1);
     const dup = await provisionRepo(env.DB, art(f), create("p4"), 2);
@@ -50,7 +50,6 @@ describe("provisionRepo", () => {
     await repos.setDeleted(env.DB, row.id, true, 3);
     const del = await provisionRepo(env.DB, art(f), create("p4"), 4);
     expect(!del.ok && del.restoreId).toBe(row.id);
-    expect((await provisionRepo(env.DB, art(f), create("admin"), 5)).ok).toBe(false);
   });
 
   it("rejects a name whose deleted row was never provisioned", async () => {

@@ -1,4 +1,5 @@
 import type { RepoRow } from "../db/repos";
+import { cloneUrl, repoHref } from "../render/paths";
 
 export function accessLabel(ms: number | null): string {
   if (ms === null) return "Access doesn't expire.";
@@ -7,7 +8,7 @@ export function accessLabel(ms: number | null): string {
 }
 
 export function cloneUrlWithPassword(origin: string, repo: string, password: string): string {
-  const u = new URL(`/${repo}.git`, origin);
+  const u = new URL(cloneUrl(origin, repo));
   u.username = "x";
   u.password = password;
   return u.toString();
@@ -36,7 +37,7 @@ export function InviteAccepted(props: { repos: RepoRow[]; urls: Record<string, s
         <strong>Save these now. They won't be shown again.</strong>
         {props.repos.map((r) => (
           <div>
-            <a href={`/${r.name}`}>{r.name}</a>
+            <a href={repoHref(r.name)}>{r.name}</a>
             <code class="clone-url">{props.urls[r.name]}</code>
             <button type="button" class="btn" data-copy={`git clone ${props.urls[r.name]}`}>Copy clone command</button>
           </div>

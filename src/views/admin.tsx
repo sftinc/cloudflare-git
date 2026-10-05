@@ -3,6 +3,7 @@ import type { InviteRow } from "../db/invites";
 import type { PushTokenRow } from "../db/tokens";
 import type { WebhookRow } from "../db/webhooks";
 import { fmtDate, NO_REPOS_OWNER } from "./public";
+import { cloneUrl, repoHref } from "../render/paths";
 import { Book, Download, Plus } from "./icons";
 
 const day = (ms: number) => fmtDate(Math.floor(ms / 1000));
@@ -68,7 +69,7 @@ export function AdminRepos(props: { repos: RepoRow[]; pending: Set<string> }) {
                 <td><a href={`/admin/repos/${r.id}`}><strong>{r.name}</strong></a>{r.description && <div class="muted">{r.description}</div>}</td>
                 <td>{repoState(r, props.pending)}</td>
                 <td class="muted">{day(r.created_at)}</td>
-                <td>{r.provisioned_at !== null && <a href={`/${r.name}`}>View</a>}</td>
+                <td>{r.provisioned_at !== null && <a href={repoHref(r.name)}>View</a>}</td>
               </tr>
             ))}
           </tbody>
@@ -146,7 +147,7 @@ export function AdminRepo(props: {
   secret?: { title: string; value: string }; error?: string;
 }) {
   const r = props.repo;
-  const cloneUrl = `${props.origin}/${r.name}.git`;
+  const url = cloneUrl(props.origin, r.name);
   const statusText = r.provisioned_at !== null ? "Ready" : props.status === "pending" ? "Importing…" : "Not created";
   return (
     <>
@@ -157,19 +158,19 @@ export function AdminRepo(props: {
       {props.secret && <Secret title={props.secret.title} value={props.secret.value} />}
       <section class="card">
         <h2>Access</h2>
-        <p>Clone / push URL: <code>{cloneUrl}</code> <button type="button" class="btn" data-copy={cloneUrl}>Copy</button></p>
+        <p>Clone / push URL: <code>{url}</code> <button type="button" class="btn" data-copy={url}>Copy</button></p>
         <div class="actions">
           {r.deleted_at === null && r.provisioned_at !== null && (
             r.public_at === null
               ? <Post action={`/admin/repos/${r.id}/visibility`} name="public" value="1" label="Make public" />
               : <Post action={`/admin/repos/${r.id}/visibility`} name="public" value="0" label="Make private" />
           )}
-          {r.provisioned_at !== null && <a class="btn" href={`/${r.name}`}>View</a>}
+          {r.provisioned_at !== null && <a class="btn" href={repoHref(r.name)}>View</a>}
           {r.deleted_at === null
             ? <Post action={`/admin/repos/${r.id}/delete`} label="Delete" class="danger" />
             : <Post action={`/admin/repos/${r.id}/restore`} label="Restore" />}
         </div>
-        <p class="muted">Pushing: use a push token as the password. <code>git remote add origin {cloneUrl}</code> then <code>git push -u origin main</code>.</p>
+        <p class="muted">Pushing: use a push token as the password. <code>git remote add origin {url}</code> then <code>git push -u origin main</code>.</p>
       </section>
       <section class="card table-scroll">
         <h2>Webhooks</h2>

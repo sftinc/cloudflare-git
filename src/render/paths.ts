@@ -32,7 +32,10 @@ export function resolveRelative(dir: string, target: string): string | null {
   return parts.join("/");
 }
 
+/** Every repo lives under /r/, so repo names never collide with app routes. */
+export const repoHref = (repo: string) => `/r/${repo}`;
+export const cloneUrl = (origin: string, repo: string) => `${origin}/r/${repo}.git`;
 export const treeHref = (repo: string, branch: string, path = "") =>
-  `/${repo}/tree/${encodePath(branch)}${path ? `/${encodePath(path)}` : ""}`;
-export const blobHref = (repo: string, branch: string, path: string) => `/${repo}/blob/${encodePath(branch)}/${encodePath(path)}`;
-export const commitsHref = (repo: string, branch: string) => `/${repo}/commits/${encodePath(branch)}`;
+  `${repoHref(repo)}/tree/${encodePath(branch)}${path ? `/${encodePath(path)}` : ""}`;
+export const blobHref = (repo: string, branch: string, path: string) => `${repoHref(repo)}/blob/${encodePath(branch)}/${encodePath(path)}`;
+export const commitsHref = (repo: string, branch: string) => `${repoHref(repo)}/commits/${encodePath(branch)}`;

@@ -1,8 +1,6 @@
 import { artifactsErrorCode } from "./artifacts";
 import { findRepoByName, insertRepo, markProvisioned, type RepoRow } from "./db/repos";
 
-export const RESERVED_NAMES = ["admin", "invite", "static"];
-
 export type ProvisionInput =
   | { kind: "create"; name: string; description: string; defaultBranch: string }
   | { kind: "import"; name: string; description: string; url: string; branch: string };
@@ -21,7 +19,6 @@ const MESSAGES: Record<string, string> = {
 
 export function validateRepoName(name: string): string | null {
   if (!/^[a-z0-9][a-z0-9-]{1,62}$/.test(name)) return "Use 2-63 lowercase letters, digits or hyphens, starting with a letter or digit.";
-  if (RESERVED_NAMES.includes(name)) return `"${name}" is reserved.`;
   return null;
 }
 

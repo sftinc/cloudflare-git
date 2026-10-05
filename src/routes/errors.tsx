@@ -4,7 +4,7 @@ import { UpstreamError, artifactsErrorCode } from "../artifacts";
 import { page } from "../views/layout";
 import { NotFound, ServerError, StorageUnavailable } from "../views/errors";
 
-const isGitPath = (path: string) => /^\/[^/]+\.git(\/|$)/.test(path);
+const isGitPath = (path: string) => /^\/r\/[^/]+\.git(\/|$)/.test(path);
 
 export function notFoundPage(c: Context<AppEnv>) {
   if (isGitPath(c.req.path)) return c.text("Not found", 404);

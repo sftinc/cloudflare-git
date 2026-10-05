@@ -63,14 +63,14 @@ describe("invites", () => {
     expect(res.headers.get("cache-control")).toBe("no-store");
     const cookie = res.headers.get("set-cookie")!.split(";")[0];
     expect(cookie).toMatch(/^cg_invites=/);
-    const m = /https:\/\/x:([A-Za-z0-9_-]{43})@git\.test\/secret\.git/.exec(body);
+    const m = /https:\/\/x:([A-Za-z0-9_-]{43})@git\.test\/r\/secret\.git/.exec(body);
     expect(m).not.toBeNull();
 
     // the cookie opens the private repo in the browser
-    expect((await request("/secret", { headers: { cookie } }, e())).res.status).toBe(200);
-    expect(await (await request("/", { headers: { cookie } }, e())).res.text()).toContain('href="/secret"');
+    expect((await request("/r/secret", { headers: { cookie } }, e())).res.status).toBe(200);
+    expect(await (await request("/", { headers: { cookie } }, e())).res.text()).toContain('href="/r/secret"');
     // the password opens it for git
-    const git = await request("/secret.git/info/refs?service=git-upload-pack", { headers: { Authorization: `Basic ${btoa(`x:${m![1]}`)}` } }, e());
+    const git = await request("/r/secret.git/info/refs?service=git-upload-pack", { headers: { Authorization: `Basic ${btoa(`x:${m![1]}`)}` } }, e());
     expect(git.res.status).not.toBe(401);
     expect(git.res.status).not.toBe(404);
 
@@ -105,6 +105,6 @@ describe("invites", () => {
     const { res } = await request("/invite/code-6", POST(), e());
     const cookie = res.headers.get("set-cookie")!.split(";")[0];
     await invites.revokeInvite(env.DB, id, Date.now());
-    expect((await request("/secret", { headers: { cookie } }, e())).res.status).toBe(404);
+    expect((await request("/r/secret", { headers: { cookie } }, e())).res.status).toBe(404);
   });
 });

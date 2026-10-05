@@ -60,17 +60,17 @@ const e = () => makeEnv({ ARTIFACTS: fake as unknown as Artifacts });
 
 describe("access", () => {
   it.each([
-    ["GET", "/pub.git/info/refs?service=git-upload-pack", {}, 200],
-    ["GET", "/priv.git/info/refs?service=git-upload-pack", {}, 401],
-    ["GET", "/nope.git/info/refs?service=git-upload-pack", {}, 401],
-    ["GET", "/nope.git/info/refs?service=git-upload-pack", auth("tok"), 404],
-    ["GET", "/priv.git/info/refs?service=git-upload-pack", auth("wrong"), 404],
-    ["GET", "/priv.git/info/refs?service=git-upload-pack", auth("tok"), 200],
-    ["GET", "/pub.git/info/refs?service=git-receive-pack", {}, 401],
-    ["GET", "/pub.git/info/refs?service=git-receive-pack", auth("tok"), 200],
-    ["GET", "/pub.git/info/refs?service=bogus", {}, 404],
-    ["GET", "/pub.git/HEAD", {}, 404],
-    ["GET", "/pub.git/objects/info/packs", {}, 404],
+    ["GET", "/r/pub.git/info/refs?service=git-upload-pack", {}, 200],
+    ["GET", "/r/priv.git/info/refs?service=git-upload-pack", {}, 401],
+    ["GET", "/r/nope.git/info/refs?service=git-upload-pack", {}, 401],
+    ["GET", "/r/nope.git/info/refs?service=git-upload-pack", auth("tok"), 404],
+    ["GET", "/r/priv.git/info/refs?service=git-upload-pack", auth("wrong"), 404],
+    ["GET", "/r/priv.git/info/refs?service=git-upload-pack", auth("tok"), 200],
+    ["GET", "/r/pub.git/info/refs?service=git-receive-pack", {}, 401],
+    ["GET", "/r/pub.git/info/refs?service=git-receive-pack", auth("tok"), 200],
+    ["GET", "/r/pub.git/info/refs?service=bogus", {}, 404],
+    ["GET", "/r/pub.git/HEAD", {}, 404],
+    ["GET", "/r/pub.git/objects/info/packs", {}, 404],
   ] as const)("%s %s → %i", async (method, path, headers, status) => {
     const { res } = await request(path, { method, headers }, e());
     expect(res.status).toBe(status);
@@ -80,14 +80,14 @@ describe("access", () => {
   it("deleted repos are 404 even with a token", async () => {
     const r = (await repos.findRepoByName(env.DB, "pub"))!;
     await repos.setDeleted(env.DB, r.id, true, 2);
-    const { res } = await request("/pub.git/info/refs?service=git-upload-pack", { headers: auth("tok") }, e());
+    const { res } = await request("/r/pub.git/info/refs?service=git-upload-pack", { headers: auth("tok") }, e());
     expect(res.status).toBe(404);
   });
 });
 
 describe("forwarding", () => {
   it("adds a Bearer read token and forwards Git-Protocol (v2)", async () => {
-    const { res } = await request("/pub.git/git-upload-pack", {
+    const { res } = await request("/r/pub.git/git-upload-pack", {
       method: "POST",
       headers: { "Content-Type": "application/x-git-upload-pack-request", "Git-Protocol": "version=2" },
       body: "0000",
@@ -103,7 +103,7 @@ describe("forwarding", () => {
   it("maps upstream failures to 502", async () => {
     vi.restoreAllMocks();
     stubFetch(() => new Response("boom", { status: 500 }));
-    const { res } = await request("/pub.git/info/refs?service=git-upload-pack", {}, e());
+    const { res } = await request("/r/pub.git/info/refs?service=git-upload-pack", {}, e());
     expect(res.status).toBe(502);
   });
 });
@@ -115,7 +115,7 @@ describe("push", () => {
     "0000PACK\x00\x00\x00\x02\x00\x00\x00\x00";
 
   it("streams the push with a write token and fires webhooks for accepted branches only", async () => {
-    const { res, done } = await request("/priv.git/git-receive-pack", {
+    const { res, done } = await request("/r/priv.git/git-receive-pack", {
       method: "POST",
       headers: { ...auth("tok"), "Content-Type": "application/x-git-receive-pack-request" },
       body: pushBody(),
@@ -133,7 +133,7 @@ describe("push", () => {
   });
 
   it("forwards gzip push bodies untouched and skips webhooks", async () => {
-    const { res, done } = await request("/priv.git/git-receive-pack", {
+    const { res, done } = await request("/r/priv.git/git-receive-pack", {
       method: "POST",
       headers: { ...auth("tok"), "Content-Type": "application/x-git-receive-pack-request", "Content-Encoding": "gzip" },
       body: "\x1f\x8b-not-really-gzip",
@@ -154,7 +154,7 @@ describe("push", () => {
       await req.arrayBuffer();
       return new Response("garbage-without-pkt-lines");
     });
-    const { res, done } = await request("/priv.git/git-receive-pack", {
+    const { res, done } = await request("/r/priv.git/git-receive-pack", {
       method: "POST",
       headers: { ...auth("tok"), "Content-Type": "application/x-git-receive-pack-request" },
       body: pushBody(),
@@ -178,7 +178,7 @@ describe("push", () => {
       });
       return new Response(body, { headers: { "Content-Type": "application/x-git-receive-pack-result" } });
     });
-    const { res, done } = await request("/priv.git/git-receive-pack", {
+    const { res, done } = await request("/r/priv.git/git-receive-pack", {
       method: "POST",
       headers: { ...auth("tok"), "Content-Type": "application/x-git-receive-pack-request" },
       body: pushBody(),
@@ -198,7 +198,7 @@ describe("push", () => {
       return new Response(report(["unpack ok", "ok refs/heads/main"], false));
     });
     const body = encodePkt(`${A} ${ZERO_SHA} refs/heads/main\0report-status delete-refs\n`) + "0000";
-    const { res, done } = await request("/priv.git/git-receive-pack", { method: "POST", headers: auth("tok"), body }, e());
+    const { res, done } = await request("/r/priv.git/git-receive-pack", { method: "POST", headers: auth("tok"), body }, e());
     await res.arrayBuffer();
     await done();
     expect(await upstream[0].json()).toMatchObject({ branch: "main", deleted: true, after: ZERO_SHA });

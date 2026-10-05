@@ -118,8 +118,8 @@ the same default branch as the source, then:
 ```sh
 git clone --mirror https://github.com/you/project.git
 cd project.git
-git push https://git.example.com/project.git --all
-git push https://git.example.com/project.git --tags
+git push https://git.example.com/r/project.git --all
+git push https://git.example.com/r/project.git --tags
 ```
 
 Don't use `git push --mirror`: a GitHub mirror also holds `refs/pull/*`, and Artifacts applies a
@@ -133,7 +133,7 @@ If the repo is over 100 MB, push to the "Direct push URL" from the repo's admin 
 Create a push token in `/admin/tokens` (optionally limited to some repos), then:
 
 ```sh
-git remote add origin https://git.example.com/project.git
+git remote add origin https://git.example.com/r/project.git
 git push -u origin main
 ```
 
@@ -145,12 +145,12 @@ so use it **for CI runners only**, never on your own machine:
 
 ```sh
 git config --global credential.helper '!f() { echo username=x; echo password=$GIT_PUSH_TOKEN; }; f'
-git push https://git.example.com/project.git HEAD:main
+git push https://git.example.com/r/project.git HEAD:main
 ```
 
 ## Sharing
 
-- **Public repos**: share `https://git.example.com/<name>`; anyone can browse and clone.
+- **Public repos**: share `https://git.example.com/r/<name>`; anyone can browse and clone.
 - **Private repos**: create an invite in `/admin/invites`, choose the repos, how long the link
   stays open (1 hour, 24 hours, 7 days) and how long access lasts (7 days to never). The link
   works once: opening it and clicking "Accept invite" sets a browser cookie for browsing and shows

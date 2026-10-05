@@ -1,6 +1,6 @@
 import { raw } from "hono/html";
 import type { RepoRow } from "../db/repos";
-import { blobHref, commitsHref, treeHref } from "../render/paths";
+import { blobHref, commitsHref, repoHref, treeHref } from "../render/paths";
 import { Book, Branch, Chevron, Clock, Copy, File, Folder } from "./icons";
 
 export const NO_REPOS_OWNER = "Create an empty repository to push to, or import one from another host.";
@@ -36,7 +36,7 @@ export function Home(props: { repos: RepoRow[]; owner: boolean }) {
         <ul class="repo-grid">
           {props.repos.map((r) => (
             <li>
-              <a href={`/${r.name}`} class="repo-card">
+              <a href={repoHref(r.name)} class="repo-card">
                 <span class="repo-card-head">
                   <Book />
                   <span class="repo-name">{r.name}</span>
@@ -67,7 +67,7 @@ function RepoHeader(props: { repo: RepoRow; cloneUrl: string }) {
   return (
     <div class="repo-head">
       <h1 class="page-title">
-        <a href={`/${props.repo.name}`}>{props.repo.name}</a>
+        <a href={repoHref(props.repo.name)}>{props.repo.name}</a>
         {props.repo.public_at === null ? <span class="badge">Private</span> : <span class="badge ok">Public</span>}
       </h1>
       {props.repo.description && <p class="muted">{props.repo.description}</p>}

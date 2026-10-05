@@ -94,13 +94,11 @@ describe("repos", () => {
     expect((await repos.findRepoById(env.DB, none))!.public_at).toBeNull();
   });
   it("keeps the private choice when the form re-renders", async () => {
-    const r = await call("POST", "/admin/repos", { name: "admin", visibility: "private" });
+    const r = await call("POST", "/admin/repos", { name: "Bad Name", visibility: "private" });
     expect(r.html).toMatch(/<option value="private" selected/);
   });
-  it("rejects reserved names", async () => {
-    const r = await call("POST", "/admin/repos", { name: "admin" });
-    expect(r.status).toBe(422);
-    expect(r.html).toContain("reserved");
+  it("allows names that match app routes, since repos live under /r/", async () => {
+    expect((await call("POST", "/admin/repos", { name: "admin" })).status).toBe(303);
   });
   it("clears credential URLs on import", async () => {
     const r = await call("POST", "/admin/import", { name: "imp", url: "https://u:p@github.com/a/b" });

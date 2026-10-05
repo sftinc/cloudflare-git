@@ -367,7 +367,7 @@ async function screenshots(ids, inviteForBrowser) {
   const { send, waitFor, listeners } = chrome;
   const errors = [];
   let currentUrl = "";
-  const expected404 = new Set([`${ORIGIN}/${NAMES.pub}/blob/main/nope.txt`]);
+  const expected404 = new Set([`${ORIGIN}/r/${NAMES.pub}/blob/main/nope.txt`]);
   listeners.add((m) => {
     if (m.method === "Runtime.exceptionThrown") errors.push(`${currentUrl}: exception ${m.params.exceptionDetails.exception?.description ?? m.params.exceptionDetails.text}`);
     if (m.method === "Runtime.consoleAPICalled" && m.params.type === "error") errors.push(`${currentUrl}: console.error ${m.params.args.map((a) => a.value ?? a.description).join(" ")}`);
@@ -417,7 +417,7 @@ async function screenshots(ids, inviteForBrowser) {
   const evaluate = async (expression) => (await send("Runtime.evaluate", { expression, returnByValue: true })).result.value;
 
   try {
-    const p = `${ORIGIN}/${NAMES.pub}`;
+    const p = `${ORIGIN}/r/${NAMES.pub}`;
     await shot("home", `${ORIGIN}/`);
     await shot("repo-home", p);
     await shot("tree-docs", `${p}/tree/main/docs`);
@@ -430,8 +430,8 @@ async function screenshots(ids, inviteForBrowser) {
     await submit("document.querySelector('form').submit()", "invite-accepted");
     await shot("home-with-invite", `${ORIGIN}/`);
     check("browser home lists the invited private repo", (await evaluate("document.body.innerText")).includes(NAMES.priv));
-    await shot("private-repo", `${ORIGIN}/${NAMES.priv}`);
-    await shot("imported-repo", `${ORIGIN}/${NAMES.imp}`);
+    await shot("private-repo", `${ORIGIN}/r/${NAMES.priv}`);
+    await shot("imported-repo", `${ORIGIN}/r/${NAMES.imp}`);
 
     await send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 3, mobile: true });
     for (const [name, url] of [["mobile-repo-home", p], ["mobile-file-code", `${p}/blob/main/src/index.ts`]]) {
@@ -522,7 +522,7 @@ async function main() {
   const featureSha = git(["rev-parse", "feature/login"], { cwd: WORK });
 
   // 7. Push
-  const pushUrl = (name) => `http://x:${pushToken}@localhost:${PORT}/${name}.git`;
+  const pushUrl = (name) => `http://x:${pushToken}@localhost:${PORT}/r/${name}.git`;
   const push = gitStatus(["push", pushUrl(NAMES.pub), "main", "feature/login"], { cwd: WORK });
   check("push main and feature/login", push.code === 0, push.code === 0 ? "" : push.out);
 
@@ -541,18 +541,18 @@ async function main() {
   );
 
   // 9. Public clone
-  const clonePub = gitStatus(["clone", "-q", `${ORIGIN}/${NAMES.pub}.git`, path.join(OUT, "clone-pub")]);
+  const clonePub = gitStatus(["clone", "-q", `${ORIGIN}/r/${NAMES.pub}.git`, path.join(OUT, "clone-pub")]);
   check("anonymous clone of public repo", clonePub.code === 0, clonePub.out);
   check("clone HEAD equals local main", git(["rev-parse", "HEAD"], { cwd: path.join(OUT, "clone-pub") }) === mainSha);
-  const lsPub = git(["ls-remote", `${ORIGIN}/${NAMES.pub}.git`]);
+  const lsPub = git(["ls-remote", `${ORIGIN}/r/${NAMES.pub}.git`]);
   check("feature/login exists on the remote", lsPub.includes(`${featureSha}\trefs/heads/feature/login`), lsPub);
 
   // 10. Private repo
   const pushPriv = gitStatus(["push", pushUrl(NAMES.priv), "main"], { cwd: WORK });
   check("push main to private repo", pushPriv.code === 0, pushPriv.out);
-  const lsPriv = gitStatus(["ls-remote", `${ORIGIN}/${NAMES.priv}.git`]);
+  const lsPriv = gitStatus(["ls-remote", `${ORIGIN}/r/${NAMES.priv}.git`]);
   check("anonymous ls-remote of private repo fails", lsPriv.code !== 0);
-  check("private repo page is 404 without cookies", (await fetch(`${ORIGIN}/${NAMES.priv}`)).status === 404);
+  check("private repo page is 404 without cookies", (await fetch(`${ORIGIN}/r/${NAMES.priv}`)).status === 404);
 
   // 11. Invite via HTTP
   const link = await createInvite(ids.priv, "Sam");
@@ -565,7 +565,7 @@ async function main() {
   check("accepting the invite sets a cookie and shows a clone URL", accept.status === 200 && !!cookie && cloneUrl.startsWith("http://x:"));
   const clonePriv = gitStatus(["clone", "-q", cloneUrl, path.join(OUT, "clone-priv")]);
   check("clone private repo with the invite URL", clonePriv.code === 0, clonePriv.out);
-  check("private repo page is 200 with the invite cookie", (await fetch(`${ORIGIN}/${NAMES.priv}`, { headers: { Cookie: cookie } })).status === 200);
+  check("private repo page is 200 with the invite cookie", (await fetch(`${ORIGIN}/r/${NAMES.priv}`, { headers: { Cookie: cookie } })).status === 200);
   check("a second accept is refused", (await fetch(link, { method: "POST", headers: { Origin: ORIGIN } })).status === 404);
 
   // 12. Import
@@ -579,21 +579,21 @@ async function main() {
   }
   check("import becomes Ready", ready);
   await makePublic(impId);
-  const impPage = await fetch(`${ORIGIN}/${NAMES.imp}`);
+  const impPage = await fetch(`${ORIGIN}/r/${NAMES.imp}`);
   const impHtml = await impPage.text();
   check("imported repo page is 200", impPage.status === 200);
   check("imported repo shows its default branch (master)", /Branch<\/span> <strong>master<\/strong>/.test(impHtml));
 
   // 13. Raw safety
-  const rawPng = await fetch(`${ORIGIN}/${NAMES.pub}/blob/main/docs/arch.png?raw=1`);
+  const rawPng = await fetch(`${ORIGIN}/r/${NAMES.pub}/blob/main/docs/arch.png?raw=1`);
   check(
     "binary raw is a download",
     rawPng.headers.get("content-type") === "application/octet-stream" && (rawPng.headers.get("content-disposition") ?? "").startsWith("attachment"),
     `${rawPng.headers.get("content-type")} / ${rawPng.headers.get("content-disposition")}`,
   );
-  const rawMd = await fetch(`${ORIGIN}/${NAMES.pub}/blob/main/README.md?raw=1`);
+  const rawMd = await fetch(`${ORIGIN}/r/${NAMES.pub}/blob/main/README.md?raw=1`);
   check("text raw is text/plain", rawMd.headers.get("content-type") === "text/plain; charset=utf-8", rawMd.headers.get("content-type"));
-  const notes = await fetch(`${ORIGIN}/${NAMES.pub}/blob/main/docs/${encodeURIComponent("my notes #1.md")}`);
+  const notes = await fetch(`${ORIGIN}/r/${NAMES.pub}/blob/main/docs/${encodeURIComponent("my notes #1.md")}`);
   check("file with space and # in its name opens", notes.status === 200 && (await notes.text()).includes("Notes #1"));
 
   // 14. Screenshots

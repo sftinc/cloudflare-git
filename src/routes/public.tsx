@@ -5,7 +5,7 @@ import { canView, getViewer, visibleRepos } from "../auth/viewer";
 import { findLiveRepo, type RepoRow } from "../db/repos";
 import { highlightCode } from "../render/highlight";
 import { renderMarkdown } from "../render/markdown";
-import { decodePath, splitRefPath } from "../render/paths";
+import { cloneUrl, decodePath, repoHref, splitRefPath } from "../render/paths";
 import { siteOrigin } from "../lib/site";
 import { page } from "../views/layout";
 import { BlobView, Commits, EmptyRepo, Home, TreeView } from "../views/public";
@@ -23,12 +23,12 @@ async function load(c: Context<AppEnv>): Promise<Loaded | null> {
   const repo = await findLiveRepo(c.env.DB, c.req.param("repo")!);
   if (!repo || !(await canView(c.env.DB, await getViewer(c), repo, Date.now()))) return null;
   const { branches, head } = await listBranches(c.env.ARTIFACTS, repo.name);
-  return { repo, branches, head, cloneUrl: `${siteOrigin(c)}/${repo.name}.git` };
+  return { repo, branches, head, cloneUrl: cloneUrl(siteOrigin(c), repo.name) };
 }
 
-/** Decoded path after `/<repo>/<kind>/`, or null when malformed. */
+/** Decoded path after `/r/<repo>/<kind>/`, or null when malformed. */
 function rest(c: Context<AppEnv>, l: Loaded, kind: string): string | null {
-  const prefix = `/${l.repo.name}/${kind}/`;
+  const prefix = `${repoHref(l.repo.name)}/${kind}/`;
   const pathname = new URL(c.req.url).pathname;
   return pathname.startsWith(prefix) ? decodePath(pathname.slice(prefix.length)) : null;
 }
@@ -67,14 +67,14 @@ publicRoutes.get("/", async (c) => {
   return page(c, "Repositories", <Home repos={repos} owner={viewer.owner} />);
 });
 
-publicRoutes.get(`/:repo{${NAME}}`, async (c) => {
+publicRoutes.get(`/r/:repo{${NAME}}`, async (c) => {
   const l = await load(c);
   if (!l) return c.notFound();
   if (l.branches.length === 0) return page(c, l.repo.name, <EmptyRepo repo={l.repo} cloneUrl={l.cloneUrl} />);
   return renderTree(c, l, l.head ?? l.branches[0], "");
 });
 
-publicRoutes.get(`/:repo{${NAME}}/tree/*`, async (c) => {
+publicRoutes.get(`/r/:repo{${NAME}}/tree/*`, async (c) => {
   const l = await load(c);
   const r = l && rest(c, l, "tree");
   const at = l && r !== null ? splitRefPath(r, l.branches) : null;
@@ -82,7 +82,7 @@ publicRoutes.get(`/:repo{${NAME}}/tree/*`, async (c) => {
   return renderTree(c, l, at.branch, at.path);
 });
 
-publicRoutes.get(`/:repo{${NAME}}/blob/*`, async (c) => {
+publicRoutes.get(`/r/:repo{${NAME}}/blob/*`, async (c) => {
   const l = await load(c);
   const r = l && rest(c, l, "blob");
   const at = l && r !== null ? splitRefPath(r, l.branches) : null;
@@ -126,7 +126,7 @@ publicRoutes.get(`/:repo{${NAME}}/blob/*`, async (c) => {
   );
 });
 
-publicRoutes.get(`/:repo{${NAME}}/commits/*`, async (c) => {
+publicRoutes.get(`/r/:repo{${NAME}}/commits/*`, async (c) => {
   const l = await load(c);
   const branch = l && rest(c, l, "commits");
   if (!l || !branch || !l.branches.includes(branch)) return c.notFound();

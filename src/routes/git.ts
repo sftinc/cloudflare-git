@@ -9,7 +9,7 @@ import { deliverWebhooks, pushEventsFrom } from "../webhooks";
 
 type Service = "git-upload-pack" | "git-receive-pack";
 
-const REPO = "/:repo{[a-z0-9][a-z0-9-]*\\.git}";
+const REPO = "/r/:repo{[a-z0-9][a-z0-9-]*\\.git}";
 const FORWARD = ["content-type", "accept", "git-protocol", "content-encoding", "user-agent"];
 
 export const gitRoutes = new Hono<AppEnv>();
