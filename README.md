@@ -86,6 +86,16 @@ cookie to `/` as well as `/admin` (spec §14 item 5). Check it after deploying: 
 then `/`. If your private repos don't show up, the cookie is scoped to `/admin`; give yourself an
 invite instead (below).
 
+### First steps after deploying
+
+1. Open `https://git.example.com/admin` and log in through Access.
+2. In **Push tokens**, create a token and copy it now (it is shown once).
+3. Bring in a repo: **Import** for a public repo, or create an empty repo and push it
+   (see [Moving repos in](#moving-repos-in)). Git asks for a username (anything) and a password
+   (the token).
+4. Still logged in, open `https://git.example.com/`. If your private repos are listed, the Access
+   cookie reaches the public pages; if not, see the note above.
+
 ## Moving repos in
 
 **Public repos: Import.** In `/admin`, "Import from a public URL". It copies the source's default
