@@ -4,6 +4,7 @@ import type { PushTokenRow } from "../db/tokens";
 import type { WebhookRow } from "../db/webhooks";
 import { fmtDate, NO_REPOS_OWNER } from "./public";
 import { cloneUrl, repoHref } from "../render/paths";
+import { GitSetup } from "./git-setup";
 import { Book, Download, Plus } from "./icons";
 
 const day = (ms: number) => fmtDate(Math.floor(ms / 1000));
@@ -257,7 +258,8 @@ export function AdminTokens(props: { tokens: (PushTokenRow & { repo_names: strin
       {props.error && <div class="error">{props.error}</div>}
       {props.created && (
         <Secret title="New push token" value={props.created}>
-          <p class="muted">Use it as the password when git asks (any username). On a Mac, the keychain remembers it. For CI, set <code>GIT_PUSH_TOKEN</code> and run <code>git config --global credential.helper '!f() {"{"} echo username=x; echo password=$GIT_PUSH_TOKEN; {"}"}; f'</code>.</p>
+          <GitSetup origin={props.origin} password={props.created} />
+          <p class="muted">For CI, set <code>GIT_PUSH_TOKEN</code> and run <code>git config --global credential.helper '!f() {"{"} echo username=x; echo password=$GIT_PUSH_TOKEN; {"}"}; f'</code>.</p>
         </Secret>
       )}
       <section class="card">

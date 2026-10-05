@@ -6,7 +6,7 @@ import { randomSecret, sha256Hex } from "../lib/crypto";
 import { siteOrigin } from "../lib/site";
 import { page } from "../views/layout";
 import { InviteInvalid } from "../views/errors";
-import { InviteAccepted, InviteConfirm, cloneUrlWithPassword } from "../views/invite";
+import { InviteAccepted, InviteConfirm } from "../views/invite";
 
 export const inviteRoutes = new Hono<AppEnv>();
 
@@ -29,6 +29,5 @@ inviteRoutes.post("/:code", async (c) => {
   }
   await writeInviteIds(c, [...new Set([...(await readInviteIds(c)), inv.id])]);
   const repos = await reposForInvite(c.env.DB, inv.id);
-  const urls = Object.fromEntries(repos.map((r) => [r.name, cloneUrlWithPassword(siteOrigin(c), r.name, password)]));
-  return page(c, "Invite accepted", <InviteAccepted repos={repos} urls={urls} />);
+  return page(c, "Invite accepted", <InviteAccepted repos={repos} origin={siteOrigin(c)} password={password} />);
 });

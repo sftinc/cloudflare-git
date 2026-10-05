@@ -55,7 +55,7 @@ describe("invites", () => {
     expect(res.status).toBe(403);
   });
 
-  it("POST redeems once, sets the cookie and shows a working clone URL", async () => {
+  it("POST redeems once, sets the cookie and shows a working git setup command", async () => {
     await invite("code-3");
     const { res } = await request("/invite/code-3", POST(), e());
     const body = await res.text();
@@ -63,8 +63,9 @@ describe("invites", () => {
     expect(res.headers.get("cache-control")).toBe("no-store");
     const cookie = res.headers.get("set-cookie")!.split(";")[0];
     expect(cookie).toMatch(/^cg_invites=/);
-    const m = /https:\/\/x:([A-Za-z0-9_-]{43})@git\.test\/r\/secret\.git/.exec(body);
+    const m = /host=git\.test\\nusername=x\\npassword=([A-Za-z0-9_-]{43})\\n.{0,8} \| git credential approve/.exec(body);
     expect(m).not.toBeNull();
+    expect(body).toContain("git clone https://git.test/r/secret.git");
 
     // the cookie opens the private repo in the browser
     expect((await request("/r/secret", { headers: { cookie } }, e())).res.status).toBe(200);

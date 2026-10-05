@@ -1,17 +1,12 @@
 import type { RepoRow } from "../db/repos";
 import { cloneUrl, repoHref } from "../render/paths";
+import { GitSetup } from "./git-setup";
+import { Copy } from "./icons";
 
 export function accessLabel(ms: number | null): string {
   if (ms === null) return "Access doesn't expire.";
   const days = Math.round(ms / 86_400_000);
   return `Access lasts ${days === 365 ? "1 year" : `${days} days`} from now.`;
-}
-
-export function cloneUrlWithPassword(origin: string, repo: string, password: string): string {
-  const u = new URL(cloneUrl(origin, repo));
-  u.username = "x";
-  u.password = password;
-  return u.toString();
 }
 
 export function InviteConfirm(props: { label: string; repos: RepoRow[]; accessMs: number | null; action: string }) {
@@ -28,21 +23,28 @@ export function InviteConfirm(props: { label: string; repos: RepoRow[]; accessMs
   );
 }
 
-export function InviteAccepted(props: { repos: RepoRow[]; urls: Record<string, string> }) {
+export function InviteAccepted(props: { repos: RepoRow[]; origin: string; password: string }) {
   return (
     <section class="card invite">
       <h2>Invite accepted</h2>
-      <p>You can browse these repositories in this browser. To clone them, use your personal URL below.</p>
+      <p>You can browse these repositories in this browser. To clone them, run the command below now (it won't be shown again), then clone as usual.</p>
       <div class="secret">
-        <strong>Save these now. They won't be shown again.</strong>
-        {props.repos.map((r) => (
-          <div>
-            <a href={repoHref(r.name)}>{r.name}</a>
-            <code class="clone-url">{props.urls[r.name]}</code>
-            <button type="button" class="btn" data-copy={`git clone ${props.urls[r.name]}`}>Copy clone command</button>
-          </div>
-        ))}
+        <GitSetup origin={props.origin} password={props.password} />
       </div>
+      <ul class="clones">
+        {props.repos.map((r) => {
+          const cmd = `git clone ${cloneUrl(props.origin, r.name)}`;
+          return (
+            <li>
+              <a href={repoHref(r.name)}><strong>{r.name}</strong></a>
+              <div class="clone">
+                <code>{cmd}</code>
+                <button type="button" class="btn" data-copy={cmd}><Copy /> Copy</button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
       <p><a href="/">Go to repositories</a></p>
     </section>
   );

@@ -35,6 +35,11 @@ export function resolveRelative(dir: string, target: string): string | null {
 /** Every repo lives under /r/, so repo names never collide with app routes. */
 export const repoHref = (repo: string) => `/r/${repo}`;
 export const cloneUrl = (origin: string, repo: string) => `${origin}/r/${repo}.git`;
+/** Saves a password for this host in whatever credential store git uses (Keychain, GCM, libsecret). */
+export function gitLoginCommand(origin: string, password: string) {
+  const u = new URL(origin);
+  return `printf 'protocol=${u.protocol.slice(0, -1)}\\nhost=${u.host}\\nusername=x\\npassword=${password}\\n' | git credential approve`;
+}
 export const treeHref = (repo: string, branch: string, path = "") =>
   `${repoHref(repo)}/tree/${encodePath(branch)}${path ? `/${encodePath(path)}` : ""}`;
 export const blobHref = (repo: string, branch: string, path: string) => `${repoHref(repo)}/blob/${encodePath(branch)}/${encodePath(path)}`;

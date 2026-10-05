@@ -152,6 +152,7 @@ describe("invites and tokens", () => {
   it("creates a push token that git accepts, then revokes it", async () => {
     const r = await call("POST", "/admin/tokens", { name: "laptop" });
     const tok = secretOf(r.html)!;
+    expect(r.html).toMatch(new RegExp(`password=${tok}\\\\n.{0,8} \\| git credential approve`));
     const id = (await call("POST", "/admin/repos", { name: "tk" })).location!.split("/").pop()!;
     expect(await tokens.findValidPushTokenId(env.DB, await sha256Hex(tok), id)).not.toBeNull();
     const listed = (await tokens.listPushTokens(env.DB))[0];
