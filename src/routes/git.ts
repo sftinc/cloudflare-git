@@ -2,9 +2,11 @@ import { Hono, type Context } from "hono";
 import type { AppEnv } from "../index";
 import { forgetRepoAccess, getRepoAccess } from "../artifacts";
 import { basicPassword, decideGitAccess } from "../auth/git-auth";
-import { findLiveRepo } from "../db/repos";
+import { findLiveAlias, findLiveRepo } from "../db/repos";
 import { touchPushToken } from "../db/tokens";
-import { CommandParser, ReportParser, tap } from "../git/pktline";
+import { CommandParser, ReportParser, encodePkt, prependOnce, tap } from "../git/pktline";
+import { cloneUrl } from "../render/paths";
+import { siteOrigin } from "../lib/site";
 import { deliverWebhooks, pushEventsFrom } from "../webhooks";
 
 type Service = "git-upload-pack" | "git-receive-pack";
@@ -26,7 +28,9 @@ gitRoutes.all(`${REPO}/*`, (c) => c.text("Not found", 404));
 async function proxy(c: Context<AppEnv>, service: Service, upstreamPath: string) {
   const now = Date.now();
   const name = c.req.param("repo")!.slice(0, -".git".length);
-  const repo = await findLiveRepo(c.env.DB, name);
+  const live = await findLiveRepo(c.env.DB, name);
+  // An old name still works for git (no redirect: git only follows one on a command's first request).
+  const repo = live ?? (await findLiveAlias(c.env.DB, name));
   const op = service === "git-receive-pack" ? "push" : "fetch";
   const decision = await decideGitAccess(c.env.DB, repo, basicPassword(c.req.header("authorization")), op, now);
   if (decision.kind === "unauthorized") {
@@ -64,15 +68,18 @@ async function proxy(c: Context<AppEnv>, service: Service, upstreamPath: string)
   let report: ReportParser | null = null;
   let ended!: () => void;
   const finished = new Promise<void>((resolve) => (ended = resolve));
-  const out = upstream.body.pipeThrough(
-    tap((chunk) => {
-      if (!report) {
-        if (!commands.done) return true;
-        report = new ReportParser(commands.capabilities.some((cap) => cap === "side-band-64k" || cap === "side-band"));
-      }
-      return report.push(chunk);
-    }, ended),
-  );
+  const sideBand = () => commands.capabilities.some((cap) => cap === "side-band-64k" || cap === "side-band");
+  const out = upstream.body
+    .pipeThrough(
+      tap((chunk) => {
+        if (!report) {
+          if (!commands.done) return true;
+          report = new ReportParser(sideBand());
+        }
+        return report.push(chunk);
+      }, ended),
+    )
+    .pipeThrough(prependOnce(() => (!live && commands.done && sideBand() ? movedNotice(cloneUrl(siteOrigin(c), repo.name)) : null)));
   c.executionCtx.waitUntil(
     finished.then(() => {
       if (!report?.done) {
@@ -84,4 +91,10 @@ async function proxy(c: Context<AppEnv>, service: Service, upstreamPath: string)
     }),
   );
   return new Response(out, { headers: resHeaders });
+}
+
+/** Band 2 is shown by git as "remote: ..." lines; each needs its newline, and no flush packet follows. */
+function movedNotice(url: string) {
+  const lines = ["This repository moved. Please use the new location:", `  ${url}`];
+  return new TextEncoder().encode(lines.map((l) => encodePkt(`\x02${l}\n`)).join(""));
 }

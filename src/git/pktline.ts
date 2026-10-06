@@ -140,6 +140,21 @@ export function parseRefAdvertisement(body: Uint8Array): { refs: Map<string, str
   return { refs, head };
 }
 
+/** Pass-through stream that emits `prefix()` (when not null) once, before the first chunk. */
+export function prependOnce(prefix: () => Uint8Array | null): TransformStream<Uint8Array, Uint8Array> {
+  let first = true;
+  return new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      if (first) {
+        first = false;
+        const p = prefix();
+        if (p) controller.enqueue(p);
+      }
+      controller.enqueue(chunk);
+    },
+  });
+}
+
 /**
  * Pass-through stream that shows each chunk to `onChunk` until it returns true.
  * Never tee(): a branch that stops reading would stall the push.
