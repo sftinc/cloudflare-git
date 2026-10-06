@@ -224,17 +224,17 @@ export function AdminInvites(props: { invites: (InviteRow & { repo_names: string
         <h2>New invite</h2>
         <form method="post" action="/admin/invites" class="stack">
           <label>Who is it for?<input type="text" name="label" required placeholder="Sam" /></label>
-          <fieldset>
-            <legend>Repositories</legend>
-            <label><input type="checkbox" name="all" value="1" /> All repositories, including new ones</label>
-            {props.repos.map((r) => <label><input type="checkbox" name="repos" value={r.id} /> {r.name} {r.public_at === null ? "" : <span class="muted">(public)</span>}</label>)}
-          </fieldset>
           <label>Link must be opened within
             <select name="redeem"><option value="1h">1 hour</option><option value="24h" selected>24 hours</option><option value="7d">7 days</option></select>
           </label>
           <label>Access lasts
             <ExpirySelect name="access" selected="30d" />
           </label>
+          <fieldset>
+            <legend>Repositories</legend>
+            <label><input type="checkbox" name="all" value="1" /> All repositories, including new ones</label>
+            {props.repos.map((r) => <label><input type="checkbox" name="repos" value={r.id} /> {r.name} {r.public_at === null ? "" : <span class="muted">(public)</span>}</label>)}
+          </fieldset>
           <button type="submit" class="primary">Create invite link</button>
         </form>
       </section>
@@ -299,14 +299,14 @@ export function AdminTokens(props: { tokens: (PushTokenRow & { repo_names: strin
         <h2>New token</h2>
         <form method="post" action="/admin/tokens" class="stack">
           <label>Name<input type="text" name="name" required placeholder="laptop" /></label>
+          <label>Expires
+            <ExpirySelect name="expires" selected="never" />
+          </label>
           <fieldset>
             <legend>Repositories</legend>
             <label><input type="checkbox" name="all" value="1" /> All repositories, including new ones</label>
             {props.repos.map((r) => <label><input type="checkbox" name="repos" value={r.id} /> {r.name}</label>)}
           </fieldset>
-          <label>Expires
-            <ExpirySelect name="expires" selected="never" />
-          </label>
           <button type="submit" class="primary">Create token</button>
         </form>
       </section>

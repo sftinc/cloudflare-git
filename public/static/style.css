@@ -190,7 +190,7 @@ form.stack button { justify-self: start; }
 .hint { font-weight: 400; font-size: 13px; color: var(--muted); }
 input[type=text], input[type=url], select { font: inherit; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); width: 100%; }
 select { appearance: none; padding-right: 32px; cursor: pointer; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 17px) 52%, calc(100% - 12px) 52%; background-size: 5px 5px; background-repeat: no-repeat; }
-fieldset { display: grid; gap: 8px; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px 12px; }
+fieldset { display: grid; gap: 8px; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px 12px; background: var(--bg); }
 fieldset label { display: flex !important; align-items: center; gap: 8px; font-weight: 400 !important; }
 input[type=checkbox] { appearance: none; flex: none; display: inline-grid; place-content: center; width: 18px; height: 18px; margin: 0; border: 1.5px solid color-mix(in srgb, var(--muted) 60%, var(--border)); border-radius: 5px; background: var(--surface); cursor: pointer; transition: background-color .12s, border-color .12s; }
 input[type=checkbox]::before { content: ""; width: 9px; height: 5px; border: solid var(--accent-text); border-width: 0 0 2px 2px; transform: translateY(-1px) rotate(-45deg) scale(0); transition: transform .12s; }
