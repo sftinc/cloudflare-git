@@ -149,6 +149,14 @@ describe("invites and tokens", () => {
     expect(r.html).toContain("waiting");
     expect((await call("POST", "/admin/invites", { label: "", repos: [], redeem: "24h", access: "never" })).status).toBe(422);
   });
+  it("invites and tokens offer the same expiry options, with their own defaults", async () => {
+    const opts = (html: string, name: string) => {
+      const select = new RegExp(`<select name="${name}">(.*?)</select>`).exec(html)![1];
+      return [...select.matchAll(/<option value="([^"]+)"( selected)?/g)].map((m) => m[1] + (m[2] ? "*" : ""));
+    };
+    expect(opts((await call("GET", "/admin/invites")).html, "access")).toEqual(["7d", "30d*", "1y", "never"]);
+    expect(opts((await call("GET", "/admin/tokens")).html, "expires")).toEqual(["7d", "30d", "1y", "never*"]);
+  });
   it("creates a push token that git accepts, then revokes it", async () => {
     const r = await call("POST", "/admin/tokens", { name: "laptop" });
     const tok = secretOf(r.html)!;

@@ -203,6 +203,16 @@ export function AdminRepo(props: {
 
 export const REDEEM_WINDOWS: Record<string, number> = { "1h": 3_600_000, "24h": 86_400_000, "7d": 7 * 86_400_000 };
 export const ACCESS_LENGTHS: Record<string, number | null> = { "7d": 7 * 86_400_000, "30d": 30 * 86_400_000, "1y": 365 * 86_400_000, never: null };
+const ACCESS_LABELS: Record<string, string> = { "7d": "7 days", "30d": "30 days", "1y": "1 year", never: "Never" };
+
+/** Same lengths, order and labels for invites and push tokens; only the default differs. */
+function ExpirySelect(props: { name: string; selected: string }) {
+  return (
+    <select name={props.name}>
+      {Object.keys(ACCESS_LENGTHS).map((k) => <option value={k} selected={k === props.selected}>{ACCESS_LABELS[k]}</option>)}
+    </select>
+  );
+}
 
 export function AdminInvites(props: { invites: (InviteRow & { repo_names: string; status: string })[]; repos: RepoRow[]; link?: string; error?: string }) {
   return (
@@ -223,7 +233,7 @@ export function AdminInvites(props: { invites: (InviteRow & { repo_names: string
             <select name="redeem"><option value="1h">1 hour</option><option value="24h" selected>24 hours</option><option value="7d">7 days</option></select>
           </label>
           <label>Access lasts
-            <select name="access"><option value="7d">7 days</option><option value="30d" selected>30 days</option><option value="1y">1 year</option><option value="never">Never expires</option></select>
+            <ExpirySelect name="access" selected="30d" />
           </label>
           <button type="submit" class="primary">Create invite link</button>
         </form>
@@ -290,7 +300,7 @@ export function AdminTokens(props: { tokens: (PushTokenRow & { repo_names: strin
         <form method="post" action="/admin/tokens" class="stack">
           <label>Name<input type="text" name="name" required placeholder="laptop" /></label>
           <label>Expires
-            <select name="expires"><option value="never" selected>Never</option><option value="7d">In 7 days</option><option value="30d">In 30 days</option><option value="1y">In 1 year</option></select>
+            <ExpirySelect name="expires" selected="never" />
           </label>
           {props.repos.length > 0 && (
             <fieldset>
