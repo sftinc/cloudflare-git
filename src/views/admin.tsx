@@ -6,7 +6,7 @@ import { fmtDate, NO_REPOS_OWNER } from "./public";
 import { repoHref } from "../render/paths";
 import { GitSetup } from "./git-setup";
 import { DESCRIPTION_MAX } from "../provision";
-import { Book, Download, Plus } from "./icons";
+import { Book, Copy, Download, Plus } from "./icons";
 
 const day = (ms: number) => fmtDate(Math.floor(ms / 1000));
 
@@ -173,8 +173,10 @@ export function AdminRepo(props: {
           {props.renamedUrl && (
             <div class="secret">
               <strong>Repository renamed.</strong> <span class="muted">Update your existing clones:</span>
-              <code>git remote set-url origin {props.renamedUrl}</code>
-              <button type="button" class="btn" data-copy={`git remote set-url origin ${props.renamedUrl}`}>Copy</button>
+              <div class="clone">
+                <code>git remote set-url origin {props.renamedUrl}</code>
+                <button type="button" class="btn" data-copy={`git remote set-url origin ${props.renamedUrl}`} aria-label="Copy command" title="Copy"><Copy /></button>
+              </div>
             </div>
           )}
           <h2 class="section-title">General</h2>
