@@ -1,12 +1,13 @@
 import { Hono, type Context } from "hono";
 import type { AppEnv } from "../index";
 import { verifyAccessJwt } from "../auth/access-jwt";
-import { findRepoById, listLiveRepos, listReposForAdmin, setDeleted, setDescription, setPublic } from "../db/repos";
+import { findRepoById, findRepoByName, listLiveRepos, listReposForAdmin, renameRepo, setDeleted, setDescription, setPublic } from "../db/repos";
 import { createInvite, deleteInvite, inviteStatus, listInvites, revokeInvite } from "../db/invites";
 import { createPushToken, deletePushToken, listPushTokens, revokePushToken } from "../db/tokens";
 import { createWebhook, deleteWebhook, listWebhooks } from "../db/webhooks";
 import { randomSecret, sha256Hex } from "../lib/crypto";
-import { DESCRIPTION_MAX, provisionRepo, refreshProvisioning, type ProvisionInput, type ProvisionStatus } from "../provision";
+import { DESCRIPTION_MAX, provisionRepo, refreshProvisioning, validateRepoName, type ProvisionInput, type ProvisionStatus } from "../provision";
+import { cloneUrl } from "../render/paths";
 import { siteOrigin } from "../lib/site";
 import { page } from "../views/layout";
 import { ACCESS_LENGTHS, AdminInvites, AdminNewRepo, AdminRepo, AdminRepos, AdminTokens, REDEEM_WINDOWS, type RepoFormValues } from "../views/admin";
@@ -76,7 +77,7 @@ adminRoutes.post("/import", async (c) => {
   return provision(c, { kind: "import", name: values.name, description: values.description, url: values.url, branch: values.branch }, values);
 });
 
-async function repoPage(c: Context<AppEnv>, extra: { secret?: { title: string; value: string }; error?: string; description?: string } = {}, status = 200) {
+async function repoPage(c: Context<AppEnv>, extra: { secret?: { title: string; value: string }; error?: string; description?: string; name?: string } = {}, status = 200) {
   const repo = await findRepoById(c.env.DB, c.req.param("id")!);
   if (!repo) return c.notFound();
   let s: ProvisionStatus = "ready";
@@ -85,7 +86,7 @@ async function repoPage(c: Context<AppEnv>, extra: { secret?: { title: string; v
     if (s === "ready") repo.provisioned_at = Date.now();
   }
   const hooks = await listWebhooks(c.env.DB, repo.id);
-  return admin(c, `${repo.name} · admin`, <AdminRepo repo={repo} status={s} hooks={hooks} {...extra} />, status);
+  return admin(c, `${repo.name} · admin`, <AdminRepo repo={repo} status={s} hooks={hooks} renamedUrl={c.req.query("renamed") ? cloneUrl(siteOrigin(c), repo.name) : undefined} {...extra} />, status);
 }
 
 adminRoutes.get("/repos/:id", (c) => repoPage(c));
@@ -97,6 +98,27 @@ adminRoutes.post("/repos/:id/description", async (c) => {
   if (description.length > DESCRIPTION_MAX) return repoPage(c, { error: `Keep the description to ${DESCRIPTION_MAX} characters or fewer.`, description }, 422);
   await setDescription(c.env.DB, repo.id, description || null, Date.now());
   return c.redirect(`/admin/repos/${repo.id}`, 303);
+});
+
+adminRoutes.post("/repos/:id/rename", async (c) => {
+  const id = c.req.param("id");
+  const name = str((await c.req.parseBody()).name);
+  const invalid = validateRepoName(name);
+  if (invalid) return repoPage(c, { error: invalid, name }, 422);
+  const taken = await findRepoByName(c.env.DB, name);
+  const exists = { error: `A repo named "${name}" already exists.`, name };
+  if (taken && taken.id !== id) return repoPage(c, exists, 422);
+  let renamed: boolean;
+  try {
+    renamed = await renameRepo(c.env.DB, id, name, Date.now());
+  } catch (err) {
+    if (!String(err).includes("UNIQUE")) throw err; // another repo took the name meanwhile
+    return repoPage(c, exists, 422);
+  }
+  if (renamed) return c.redirect(`/admin/repos/${id}?renamed=1`, 303);
+  const repo = await findRepoById(c.env.DB, id);
+  if (!repo || repo.deleted_at !== null || repo.provisioned_at === null) return c.notFound();
+  return c.redirect(`/admin/repos/${id}${repo.name === name ? "" : "?renamed=1"}`, 303);
 });
 
 adminRoutes.post("/repos/:id/visibility", async (c) => {

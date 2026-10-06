@@ -155,7 +155,7 @@ export function AdminNewRepo(props: { kind: "create" | "import"; error?: string;
 
 export function AdminRepo(props: {
   repo: RepoRow; status: "ready" | "pending" | "missing"; hooks: WebhookRow[];
-  secret?: { title: string; value: string }; error?: string; description?: string;
+  secret?: { title: string; value: string }; error?: string; description?: string; name?: string; renamedUrl?: string;
 }) {
   const r = props.repo;
   const description = props.description ?? r.description ?? "";
@@ -170,8 +170,23 @@ export function AdminRepo(props: {
       {props.secret && <Secret title={props.secret.title} value={props.secret.value} />}
       {live && (
         <>
+          {props.renamedUrl && (
+            <div class="secret">
+              <strong>Repository renamed.</strong> <span class="muted">Update your existing clones:</span>
+              <code>git remote set-url origin {props.renamedUrl}</code>
+              <button type="button" class="btn" data-copy={`git remote set-url origin ${props.renamedUrl}`}>Copy</button>
+            </div>
+          )}
           <h2 class="section-title">General</h2>
           <div class="box">
+            <form method="post" action={`/admin/repos/${r.id}/rename`} class="row field-row">
+              <label for="repo-name">Repository name</label>
+              <div class="inline">
+                <input {...NAME_INPUT} id="repo-name" value={props.name ?? r.name} aria-describedby="repo-name-hint" />
+                <button type="submit">Rename</button>
+              </div>
+              <span class="hint" id="repo-name-hint">Old links and clone URLs keep working.</span>
+            </form>
             <form method="post" action={`/admin/repos/${r.id}/description`} class="row field-row">
               <label for="description">Description</label>
               <div class="inline">

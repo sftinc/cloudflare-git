@@ -226,6 +226,87 @@ describe("repo settings page", () => {
   });
 });
 
+describe("rename", () => {
+  const newRepo = async (name: string) => (await call("POST", "/admin/repos", { name })).location!.split("/").pop()!;
+  const rename = (id: string, name: string) => call("POST", `/admin/repos/${id}/rename`, { name });
+  const aliases = async (...ids: string[]) => (await env.DB.prepare("SELECT a.name, a.repo_id, a.deleted_at FROM repo_aliases a ORDER BY a.created_at, a.name").all<{ name: string; repo_id: string; deleted_at: number | null }>()).results.filter((a) => ids.includes(a.repo_id));
+
+  it("renames, keeps the old name as an alias and shows the update command", async () => {
+    const id = await newRepo("ren-a");
+    const r = await rename(id, "ren-b");
+    expect(r.status).toBe(303);
+    expect(r.location).toBe(`/admin/repos/${id}?renamed=1`);
+    const row = (await repos.findRepoById(env.DB, id))!;
+    expect([row.name, row.storage_name]).toEqual(["ren-b", "ren-a"]);
+    expect(await aliases(id)).toEqual([{ name: "ren-a", repo_id: id, deleted_at: null }]);
+    const html = (await call("GET", r.location!)).html;
+    expect(html).toContain("git remote set-url origin https://git.test/r/ren-b.git");
+    expect(html).toContain('value="ren-b"');
+    expect((await call("GET", `/admin/repos/${id}`)).html).not.toContain("git remote set-url");
+  });
+  it("is a no-op for the current name", async () => {
+    const id = await newRepo("ren-same");
+    const before = (await repos.findRepoById(env.DB, id))!;
+    const r = await rename(id, "ren-same");
+    expect(r.location).toBe(`/admin/repos/${id}`);
+    expect(await repos.findRepoById(env.DB, id)).toEqual(before);
+    expect(await aliases(id)).toEqual([]);
+  });
+  it("rejects invalid names and keeps the typed text", async () => {
+    const id = await newRepo("ren-inv");
+    const r = await rename(id, "Bad Name");
+    expect(r.status).toBe(422);
+    expect(r.html).toContain('value="Bad Name"');
+    expect((await repos.findRepoById(env.DB, id))!.name).toBe("ren-inv");
+  });
+  it("rejects a name used by a live or a deleted repo", async () => {
+    const id = await newRepo("ren-t1");
+    const other = await newRepo("ren-t2");
+    const gone = await newRepo("ren-t3");
+    await call("POST", `/admin/repos/${gone}/delete`, {});
+    for (const name of ["ren-t2", "ren-t3"]) {
+      const r = await rename(id, name);
+      expect(r.status).toBe(422);
+      expect(r.html).toContain(`A repo named &quot;${name}&quot; already exists.`);
+    }
+    expect((await repos.findRepoById(env.DB, other))!.name).toBe("ren-t2");
+    expect(await aliases(id, other, gone)).toEqual([]);
+  });
+  it("404s for a deleted repo", async () => {
+    const id = await newRepo("ren-del");
+    await call("POST", `/admin/repos/${id}/delete`, {});
+    expect((await rename(id, "ren-del2")).status).toBe(404);
+    expect((await repos.findRepoById(env.DB, id))!.name).toBe("ren-del");
+  });
+  it("renaming onto the repo's own old alias releases it", async () => {
+    const id = await newRepo("ren-x");
+    await rename(id, "ren-y");
+    await rename(id, "ren-x");
+    expect(await aliases(id)).toEqual([{ name: "ren-x", repo_id: id, deleted_at: expect.any(Number) }, { name: "ren-y", repo_id: id, deleted_at: null }]);
+    expect((await repos.findLiveAlias(env.DB, "ren-x"))).toBeNull();
+    expect((await repos.findLiveAlias(env.DB, "ren-y"))!.id).toBe(id);
+  });
+  it("a stale rename works from the current name and leaves a name another repo took alone", async () => {
+    const id = await newRepo("ren-a1");
+    const third = await newRepo("ren-third");
+    await rename(id, "ren-b1"); // elsewhere, after the page for ren-a1 was loaded
+    await rename(third, "ren-a1"); // takes the released name
+    const r = await rename(id, "ren-c1"); // the delayed request
+    expect(r.location).toBe(`/admin/repos/${id}?renamed=1`);
+    expect((await repos.findRepoById(env.DB, id))!.name).toBe("ren-c1");
+    expect((await repos.findLiveRepo(env.DB, "ren-a1"))!.id).toBe(third);
+    expect((await repos.findLiveAlias(env.DB, "ren-b1"))!.id).toBe(id);
+    expect(await repos.findLiveAlias(env.DB, "ren-a1")).toBeNull();
+  });
+  it("a rename racing a delete changes nothing", async () => {
+    const id = await newRepo("ren-race");
+    await call("POST", `/admin/repos/${id}/delete`, {});
+    expect(await repos.renameRepo(env.DB, id, "ren-race2", 5)).toBe(false);
+    expect((await repos.findRepoById(env.DB, id))!.name).toBe("ren-race");
+    expect(await aliases(id)).toEqual([]);
+  });
+});
+
 describe("invites and tokens", () => {
   it("creates an invite link", async () => {
     const id = (await call("POST", "/admin/repos", { name: "inv" })).location!.split("/").pop()!;
