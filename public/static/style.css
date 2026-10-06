@@ -2,7 +2,7 @@
   --bg: #f6f7f9; --surface: #ffffff; --text: #1d2229; --muted: #5d6673; --border: #dde1e6;
   --accent: #2f6fde; --accent-text: #ffffff; --badge-bg: #eef1f5; --code-bg: #f3f5f8; --notice: #fff8e6;
   --ok: #1b7f3b; --warn: #a15c00; --bad: #b3261e; --ok-bg: #eaf6ee; --ok-border: #c9e8d3; --shadow: rgba(29,34,41,.08);
-  --error-bg: #fdecea; --error-text: #8a1c13; --error-border: #f5c2bd;
+  --error-bg: #fdecea; --error-text: #8a1c13; --error-border: #f5c2bd; --bad-border: #e9b4af;
   --hl-keyword: #c2185b; --hl-string: #2e7d32; --hl-number: #b35c00; --hl-comment: #7a8591; --hl-title: #6a3fc2; --hl-attr: #1565c0;
   --radius: 10px; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   color-scheme: light dark;
@@ -12,7 +12,7 @@
     --bg: #0f1216; --surface: #171b21; --text: #e6e9ee; --muted: #9aa3ae; --border: #2a313a;
     --accent: #6ea0ff; --accent-text: #0f1216; --badge-bg: #1d232b; --code-bg: #12161b; --notice: #2a2412;
     --ok: #6fd08c; --warn: #f2b45a; --bad: #ff8a80; --ok-bg: #15281c; --ok-border: #24432f; --shadow: rgba(0,0,0,.4);
-    --error-bg: #2c1514; --error-text: #ffb4ab; --error-border: #5c2b28;
+    --error-bg: #2c1514; --error-text: #ffb4ab; --error-border: #5c2b28; --bad-border: #5c2b28;
     --hl-keyword: #ff7ab2; --hl-string: #8bd49c; --hl-number: #f2a65a; --hl-comment: #7d8794; --hl-title: #b69cff; --hl-attr: #79b8ff;
     color-scheme: dark;
   }
@@ -21,7 +21,7 @@
   --bg: #0f1216; --surface: #171b21; --text: #e6e9ee; --muted: #9aa3ae; --border: #2a313a;
   --accent: #6ea0ff; --accent-text: #0f1216; --badge-bg: #1d232b; --code-bg: #12161b; --notice: #2a2412;
   --ok: #6fd08c; --warn: #f2b45a; --bad: #ff8a80; --ok-bg: #15281c; --ok-border: #24432f; --shadow: rgba(0,0,0,.4);
-  --error-bg: #2c1514; --error-text: #ffb4ab; --error-border: #5c2b28;
+  --error-bg: #2c1514; --error-text: #ffb4ab; --error-border: #5c2b28; --bad-border: #5c2b28;
   --hl-keyword: #ff7ab2; --hl-string: #8bd49c; --hl-number: #f2a65a; --hl-comment: #7d8794; --hl-title: #b69cff; --hl-attr: #79b8ff;
   color-scheme: dark;
 }
@@ -46,9 +46,10 @@ header.site .wrap { display: flex; align-items: center; gap: 16px 24px; min-heig
 .brand:hover { text-decoration: none; }
 .brand img { width: 28px; height: 28px; flex: none; object-fit: contain; }
 .brand span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.admin-nav { display: flex; gap: 16px; overflow-x: auto; }
-.admin-nav a { color: var(--muted); white-space: nowrap; }
-.admin-nav a:hover { color: var(--text); }
+.admin-nav { display: flex; overflow-x: auto; border: 1px solid var(--border); border-radius: 999px; background: var(--badge-bg); }
+.admin-nav a { color: var(--muted); white-space: nowrap; padding: 5px 14px; }
+.admin-nav a:hover { color: var(--text); text-decoration: none; }
+.admin-nav a[aria-current] { color: var(--accent); font-weight: 600; background: color-mix(in srgb, var(--accent) 14%, var(--surface)); }
 .site-actions { margin-left: auto; display: flex; align-items: center; gap: 12px; }
 .site-actions .btn { height: 34px; }
 .theme-seg { display: flex; gap: 2px; padding: 3px; border: 1px solid var(--border); border-radius: 9px; background: var(--badge-bg); }
@@ -110,7 +111,8 @@ footer.site .wrap { display: flex; justify-content: space-between; gap: 12px; fl
 .btn:hover { text-decoration: none; }
 .btn.primary, button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
 .btn.primary:hover { filter: brightness(1.08); }
-button.danger { color: var(--bad); }
+button.danger { color: var(--bad); background: var(--surface); }
+button.danger:hover { color: #fff; background: var(--bad); border-color: var(--bad); }
 button.link { background: none; border: 0; color: var(--accent); padding: 0; font-weight: 500; }
 
 .toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 20px; }
@@ -202,6 +204,32 @@ input[type=checkbox]:focus-visible { outline: 2px solid var(--accent); outline-o
 @media (prefers-reduced-motion: reduce) { input[type=checkbox], input[type=checkbox]::before { transition: none; } }
 /* "All repositories" checked: the individual repos no longer matter. */
 fieldset:has(input[name=all]:checked) label:has(input[name=repos]) { opacity: .45; pointer-events: none; }
+/* Repo settings: GitHub-style sections, each a box of rows. */
+.settings-title .icon { width: 20px; height: 20px; color: var(--muted); }
+.settings-title .crumb { color: var(--accent); font-weight: 400; }
+.settings-title .sep { color: var(--muted); font-weight: 400; }
+.settings-name { font-family: var(--mono); }
+.section-title { font-size: 20px; margin: 36px 0 12px; }
+.section-title.danger { color: var(--bad); }
+.section-lead { margin: -4px 0 14px; color: var(--muted); font-size: 14px; }
+.box { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.box.danger-zone { border-color: var(--bad-border); }
+.box > .row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 16px; margin: 0; padding: 14px 16px; border-top: 1px solid var(--border); }
+.box > .row:first-child { border-top: 0; }
+.box form { margin: 0; }
+.row-text { flex: 1 1 300px; min-width: 0; }
+.row-text strong { display: block; font-size: 14px; }
+.row-text span { display: block; font-size: 13px; color: var(--muted); }
+.box > .field-row { display: grid; gap: 6px; }
+.field-row label { font-weight: 600; font-size: 14px; }
+.field-row .inline { display: flex; gap: 8px; }
+.field-row .inline input { flex: 1 1 240px; min-width: 0; }
+.field-row .inline input.branch { flex: 0 1 160px; }
+.field-row .inline button { flex: none; }
+.add-hook { background: var(--code-bg); }
+.hook code { flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere; }
+.tag { font-size: 12px; font-family: var(--mono); background: var(--badge-bg); border: 1px solid var(--border); border-radius: 999px; padding: 0 8px; }
+.tag.all { font-family: inherit; color: var(--muted); }
 .error { background: var(--error-bg); color: var(--error-text); border: 1px solid var(--error-border); border-radius: 8px; padding: 10px 14px; margin: 16px 0; }
 .secret { background: var(--notice); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin: 16px 0; }
 .secret > code, .secret code.clone-url { display: block; overflow-x: auto; white-space: nowrap; padding: 8px 0; }
@@ -211,11 +239,17 @@ fieldset:has(input[name=all]:checked) label:has(input[name=repos]) { opacity: .4
   .form-card { max-width: none; }
   .source-pick { grid-template-columns: 1fr; }
   header.site .wrap { flex-wrap: wrap; padding-top: 8px; padding-bottom: 8px; }
-  .admin-nav { order: 1; flex-basis: 100%; padding-bottom: 4px; } /* brand + buttons share row 1, nav takes row 2 */
+  .admin-nav { order: 1; flex-basis: 100%; } /* brand + buttons share row 1, nav takes row 2 */
   .site-actions { gap: 4px; }
   .site-actions .icon-btn { width: 44px; height: 44px; padding: 0; }
   .site-actions .label, .theme-seg { display: none; }
   .site-actions .theme-cycle { display: inline-flex; }
+  .box > .row > form:last-child { flex-basis: 100%; }
+  .box > .row > form:last-child button { width: 100%; }
+  .hook code { flex-basis: 100%; }
+  .box > .hook > form:last-child { flex-basis: auto; margin-left: auto; }
+  .box > .hook > form:last-child button { width: auto; }
+  .add-hook .inline { display: grid; }
 }
 @media (max-width: 720px) { .toolbar-link { margin-left: 0; } .markdown { padding: 4px 16px 12px; } }
 

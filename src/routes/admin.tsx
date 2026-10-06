@@ -1,7 +1,7 @@
 import { Hono, type Context } from "hono";
 import type { AppEnv } from "../index";
 import { verifyAccessJwt } from "../auth/access-jwt";
-import { findRepoById, listLiveRepos, listReposForAdmin, setDeleted, setPublic } from "../db/repos";
+import { findRepoById, listLiveRepos, listReposForAdmin, setDeleted, setDescription, setPublic } from "../db/repos";
 import { createInvite, deleteInvite, inviteStatus, listInvites, revokeInvite } from "../db/invites";
 import { createPushToken, deletePushToken, listPushTokens, revokePushToken } from "../db/tokens";
 import { createWebhook, deleteWebhook, listWebhooks } from "../db/webhooks";
@@ -76,7 +76,7 @@ adminRoutes.post("/import", async (c) => {
   return provision(c, { kind: "import", name: values.name, description: values.description, url: values.url, branch: values.branch }, values);
 });
 
-async function repoPage(c: Context<AppEnv>, extra: { secret?: { title: string; value: string }; error?: string } = {}, status = 200) {
+async function repoPage(c: Context<AppEnv>, extra: { secret?: { title: string; value: string }; error?: string; description?: string } = {}, status = 200) {
   const repo = await findRepoById(c.env.DB, c.req.param("id")!);
   if (!repo) return c.notFound();
   let s: ProvisionStatus = "ready";
@@ -85,10 +85,19 @@ async function repoPage(c: Context<AppEnv>, extra: { secret?: { title: string; v
     if (s === "ready") repo.provisioned_at = Date.now();
   }
   const hooks = await listWebhooks(c.env.DB, repo.id);
-  return admin(c, `${repo.name} · admin`, <AdminRepo repo={repo} status={s} origin={siteOrigin(c)} hooks={hooks} {...extra} />, status);
+  return admin(c, `${repo.name} · admin`, <AdminRepo repo={repo} status={s} hooks={hooks} {...extra} />, status);
 }
 
 adminRoutes.get("/repos/:id", (c) => repoPage(c));
+
+adminRoutes.post("/repos/:id/description", async (c) => {
+  const repo = await findRepoById(c.env.DB, c.req.param("id"));
+  if (!repo || repo.deleted_at !== null) return c.notFound();
+  const description = str((await c.req.parseBody()).description);
+  if (description.length > 200) return repoPage(c, { error: "Keep the description to 200 characters or fewer.", description }, 422);
+  await setDescription(c.env.DB, repo.id, description || null, Date.now());
+  return c.redirect(`/admin/repos/${repo.id}`, 303);
+});
 
 adminRoutes.post("/repos/:id/visibility", async (c) => {
   const b = await c.req.parseBody();

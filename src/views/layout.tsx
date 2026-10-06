@@ -21,7 +21,9 @@ function ThemeSwitch() {
   );
 }
 
-export function Layout(props: { title: string; env: Env; admin?: boolean; owner?: boolean; children?: Child }) {
+type AdminSection = "repos" | "invites" | "tokens";
+
+export function Layout(props: { title: string; env: Env; admin?: boolean; section?: AdminSection; owner?: boolean; children?: Child }) {
   const { env, owner } = props;
   return (
     <html lang="en">
@@ -43,9 +45,9 @@ export function Layout(props: { title: string; env: Env; admin?: boolean; owner?
             </a>
             {props.admin && (
               <nav class="admin-nav">
-                <a href="/admin/repos">Repos</a>
-                <a href="/admin/invites">Invites</a>
-                <a href="/admin/tokens">Push tokens</a>
+                <a href="/admin/repos" aria-current={props.section === "repos" ? "page" : undefined}>Repos</a>
+                <a href="/admin/invites" aria-current={props.section === "invites" ? "page" : undefined}>Invites</a>
+                <a href="/admin/tokens" aria-current={props.section === "tokens" ? "page" : undefined}>Push tokens</a>
               </nav>
             )}
             <div class="site-actions">
@@ -91,10 +93,11 @@ export function Layout(props: { title: string; env: Env; admin?: boolean; owner?
 
 export async function page(c: Context<AppEnv>, title: string, body: Child, status = 200, opts: { admin?: boolean } = {}) {
   const owner = opts.admin || (await isOwnerRequest(c));
+  const section = opts.admin ? (/^\/admin\/(repos|invites|tokens)\b/.exec(c.req.path)?.[1] as AdminSection | undefined) : undefined;
   return c.html(
     <>
       {raw("<!doctype html>")}
-      <Layout title={title} env={c.env} admin={opts.admin} owner={owner}>
+      <Layout title={title} env={c.env} admin={opts.admin} section={section} owner={owner}>
         {body}
       </Layout>
     </>,

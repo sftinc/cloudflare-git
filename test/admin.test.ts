@@ -75,7 +75,7 @@ describe("repos", () => {
     expect(r.status).toBe(303);
     expect(r.location).toMatch(/^\/admin\/repos\/[0-9a-f-]{36}$/);
     expect(fake.repos.has("site")).toBe(true);
-    expect((await call("GET", r.location!)).html).toContain("Ready");
+    expect((await call("GET", r.location!)).html).toContain('<span class="badge">Private</span>');
   });
   it("re-renders the form with values and the error on failure", async () => {
     fake.failNext = { method: "create", code: "INTERNAL_ERROR" };
@@ -148,6 +148,68 @@ describe("repos", () => {
   });
 });
 
+describe("repo settings page", () => {
+  const newRepo = async (name: string) => (await call("POST", "/admin/repos", { name })).location!.split("/").pop()!;
+
+  it("shows General, Webhooks, Direct push and the Danger Zone for a live repo", async () => {
+    const id = await newRepo("live");
+    const html = (await call("GET", `/admin/repos/${id}`)).html;
+    for (const h of ["General", "Webhooks", "Direct push", "Danger Zone"]) expect(html).toContain(`>${h}</h2>`);
+    expect(html).toContain('<a href="/admin/repos" class="crumb">Repos</a>');
+    expect(html).toContain("This repo is private");
+    expect(html).toContain("Make public");
+    expect(html).toContain("Delete this repo");
+    expect(html).not.toContain("git remote add"); // clone instructions are gone
+    await call("POST", `/admin/repos/${id}/visibility`, { public: "1" });
+    const pub = (await call("GET", `/admin/repos/${id}`)).html;
+    expect(pub).toContain("This repo is public");
+    expect(pub).toContain("Make private");
+  });
+  it("shows only Restore for a deleted repo", async () => {
+    const id = await newRepo("gone");
+    await call("POST", `/admin/repos/${id}/delete`, {});
+    const html = (await call("GET", `/admin/repos/${id}`)).html;
+    expect(html).toContain("Restore this repo");
+    for (const h of ["General", "Webhooks", "Direct push"]) expect(html).not.toContain(`>${h}</h2>`);
+  });
+  it("shows only Delete for a repo that was never created", async () => {
+    const r = await repos.insertRepo(env.DB, { name: "half", description: null }, Date.now());
+    fake.failNext = { method: "get", code: "NOT_FOUND" };
+    const html = (await call("GET", `/admin/repos/${r.id}`)).html;
+    expect(html).toContain("Delete this repo");
+    for (const h of ["General", "Webhooks", "Direct push"]) expect(html).not.toContain(`>${h}</h2>`);
+  });
+  it("saves, clears and limits the description", async () => {
+    const id = await newRepo("descr");
+    const saved = await call("POST", `/admin/repos/${id}/description`, { description: "  Docs site  " });
+    expect(saved.status).toBe(303);
+    expect(saved.location).toBe(`/admin/repos/${id}`);
+    expect((await repos.findRepoById(env.DB, id))!.description).toBe("Docs site");
+    expect((await call("GET", `/admin/repos/${id}`)).html).toContain('value="Docs site"');
+    await call("POST", `/admin/repos/${id}/description`, { description: "" });
+    expect((await repos.findRepoById(env.DB, id))!.description).toBeNull();
+    const long = "x".repeat(201);
+    const tooLong = await call("POST", `/admin/repos/${id}/description`, { description: long });
+    expect(tooLong.status).toBe(422);
+    expect(tooLong.html).toContain(`value="${long}"`);
+    expect((await repos.findRepoById(env.DB, id))!.description).toBeNull();
+  });
+  it("won't change a deleted repo's description", async () => {
+    const id = await newRepo("descr-gone");
+    await call("POST", `/admin/repos/${id}/delete`, {});
+    expect((await call("POST", `/admin/repos/${id}/description`, { description: "nope" })).status).toBe(404);
+    expect((await repos.findRepoById(env.DB, id))!.description).toBeNull();
+  });
+  it("marks the current section in the admin nav", async () => {
+    const id = await newRepo("nav");
+    for (const [p, href] of [["/admin/repos", "/admin/repos"], [`/admin/repos/${id}`, "/admin/repos"], ["/admin/invites", "/admin/invites"], ["/admin/tokens", "/admin/tokens"]]) {
+      const html = (await call("GET", p)).html;
+      expect(html.match(/aria-current="page"/g)).toHaveLength(1);
+      expect(html).toContain(`<a href="${href}" aria-current="page">`);
+    }
+  });
+});
+
 describe("invites and tokens", () => {
   it("creates an invite link", async () => {
     const id = (await call("POST", "/admin/repos", { name: "inv" })).location!.split("/").pop()!;
@@ -188,5 +250,6 @@ describe("invites and tokens", () => {
 });
 
 it("no inline style attributes anywhere in admin pages (CSP)", async () => {
-  for (const p of ["/admin/repos", "/admin/repos/new", "/admin/invites", "/admin/tokens"]) expect((await call("GET", p)).html).not.toMatch(/\sstyle=/);
+  const id = (await call("POST", "/admin/repos", { name: "csp" })).location!.split("/").pop()!;
+  for (const p of ["/admin/repos", "/admin/repos/new", "/admin/invites", "/admin/tokens", `/admin/repos/${id}`]) expect((await call("GET", p)).html).not.toMatch(/\sstyle=/);
 });

@@ -55,6 +55,10 @@ export async function setPublic(db: D1Database, id: string, isPublic: boolean, n
   await db.prepare("UPDATE repos SET public_at = ?1, updated_at = ?2 WHERE id = ?3").bind(isPublic ? now : null, now, id).run();
 }
 
+export async function setDescription(db: D1Database, id: string, description: string | null, now: number) {
+  await db.prepare("UPDATE repos SET description = ?1, updated_at = ?2 WHERE id = ?3").bind(description, now, id).run();
+}
+
 export async function setDeleted(db: D1Database, id: string, deleted: boolean, now: number) {
   await db.prepare("UPDATE repos SET deleted_at = ?1, updated_at = ?2 WHERE id = ?3").bind(deleted ? now : null, now, id).run();
 }

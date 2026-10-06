@@ -3,7 +3,7 @@ import type { InviteRow } from "../db/invites";
 import type { PushTokenRow } from "../db/tokens";
 import type { WebhookRow } from "../db/webhooks";
 import { fmtDate, NO_REPOS_OWNER } from "./public";
-import { cloneUrl, repoHref } from "../render/paths";
+import { repoHref } from "../render/paths";
 import { GitSetup } from "./git-setup";
 import { Book, Download, Plus } from "./icons";
 
@@ -146,59 +146,87 @@ export function AdminNewRepo(props: { kind: "create" | "import"; error?: string;
 }
 
 export function AdminRepo(props: {
-  repo: RepoRow; status: "ready" | "pending" | "missing"; origin: string; hooks: WebhookRow[];
-  secret?: { title: string; value: string }; error?: string;
+  repo: RepoRow; status: "ready" | "pending" | "missing"; hooks: WebhookRow[];
+  secret?: { title: string; value: string }; error?: string; description?: string;
 }) {
   const r = props.repo;
-  const url = cloneUrl(props.origin, r.name);
-  const statusText = r.provisioned_at !== null ? "Ready" : props.status === "pending" ? "Importing…" : "Not created";
+  const live = r.deleted_at === null && r.provisioned_at !== null;
   return (
     <>
-      <p><a href="/admin/repos">← Repos</a></p>
-      <h1 class="page-title">{r.name} {repoState(r, new Set(props.status === "pending" ? [r.id] : []))}</h1>
-      <p class="muted">Status: {statusText}</p>
+      <h1 class="page-title settings-title">
+        <Book /><a href="/admin/repos" class="crumb">Repos</a><span class="sep">/</span><span class="settings-name">{r.name}</span>
+        {repoState(r, new Set(props.status === "pending" ? [r.id] : []))}
+      </h1>
       {props.error && <div class="error">{props.error}</div>}
       {props.secret && <Secret title={props.secret.title} value={props.secret.value} />}
-      <section class="card">
-        <h2>Access</h2>
-        <p>Clone / push URL: <code>{url}</code> <button type="button" class="btn" data-copy={url}>Copy</button></p>
-        <div class="actions">
-          {r.deleted_at === null && r.provisioned_at !== null && (
-            r.public_at === null
-              ? <Post action={`/admin/repos/${r.id}/visibility`} name="public" value="1" label="Make public" />
-              : <Post action={`/admin/repos/${r.id}/visibility`} name="public" value="0" label="Make private" />
-          )}
-          {r.provisioned_at !== null && <a class="btn" href={repoHref(r.name)}>View</a>}
-          {r.deleted_at === null
-            ? <Post action={`/admin/repos/${r.id}/delete`} label="Delete" class="danger" />
-            : <Post action={`/admin/repos/${r.id}/restore`} label="Restore" />}
-        </div>
-        <p class="muted">Pushing: use a push token as the password. <code>git remote add origin {url}</code> then <code>git push -u origin main</code>.</p>
-      </section>
-      <section class="card table-scroll">
-        <h2>Webhooks</h2>
-        <table class="list">
-          <thead><tr><th>URL</th><th>Branch</th><th></th></tr></thead>
-          <tbody>
+      {live && (
+        <>
+          <h2 class="section-title">General</h2>
+          <div class="box">
+            <form method="post" action={`/admin/repos/${r.id}/description`} class="row field-row">
+              <label for="description">Description</label>
+              <div class="inline">
+                <input type="text" id="description" name="description" maxlength={200} placeholder="Shown on the repo list" value={props.description ?? r.description ?? ""} />
+                <button type="submit">Save</button>
+              </div>
+            </form>
+          </div>
+          <h2 class="section-title">Webhooks</h2>
+          <p class="section-lead">Called after each push to this repo.</p>
+          <div class="box">
             {props.hooks.map((h) => (
-              <tr><td><code>{h.url}</code></td><td>{h.branch ?? <span class="muted">all</span>}</td><td><Post action={`/admin/repos/${r.id}/webhooks/${h.id}/delete`} label="Delete" class="danger" /></td></tr>
+              <div class="row hook">
+                <code>{h.url}</code>
+                {h.branch ? <span class="tag">{h.branch}</span> : <span class="tag all">All branches</span>}
+                <Post action={`/admin/repos/${r.id}/webhooks/${h.id}/delete`} label="Delete" class="danger" />
+              </div>
             ))}
-            {props.hooks.length === 0 && <tr><td colspan={3} class="muted">No webhooks.</td></tr>}
-          </tbody>
-        </table>
-        <form method="post" action={`/admin/repos/${r.id}/webhooks`} class="stack">
-          <label>URL<input type="url" name="url" required placeholder="https://builds.example.com/hook" /></label>
-          <label>Branch <span class="hint">optional; empty means every branch</span><input type="text" name="branch" /></label>
-          <button type="submit" class="primary">Add webhook</button>
-        </form>
-      </section>
-      {r.provisioned_at !== null && (
-        <section class="card">
-          <h2>Direct push (over 100 MB)</h2>
-          <p class="muted">Pushes through this site are limited to 100 MB. For a bigger push, push straight to storage with a one-hour URL. Webhooks don't fire for direct pushes.</p>
-          <form method="post" action={`/admin/repos/${r.id}/direct-push`} class="stack"><button type="submit">Get a direct push URL</button></form>
-        </section>
+            {props.hooks.length === 0 && <p class="row muted">No webhooks yet.</p>}
+            <form method="post" action={`/admin/repos/${r.id}/webhooks`} class="row field-row add-hook">
+              <label for="hook-url">Add webhook</label>
+              <div class="inline">
+                <input type="url" id="hook-url" name="url" required placeholder="https://builds.example.com/hook" />
+                <input type="text" name="branch" class="branch" placeholder="Branch (optional)" aria-label="Branch (optional)" />
+                <button type="submit" class="primary">Add webhook</button>
+              </div>
+            </form>
+          </div>
+          <h2 class="section-title">Direct push</h2>
+          <div class="box">
+            <div class="row">
+              <div class="row-text"><strong>Push more than 100 MB</strong><span>Pushes through this site stop at 100 MB. Get a one-hour URL that pushes straight to storage. Webhooks don't fire for direct pushes.</span></div>
+              <Post action={`/admin/repos/${r.id}/direct-push`} label="Get a direct push URL" />
+            </div>
+          </div>
+        </>
       )}
+      <h2 class="section-title danger">Danger Zone</h2>
+      <div class="box danger-zone">
+        {r.deleted_at !== null ? (
+          <div class="row">
+            <div class="row-text"><strong>Restore this repo</strong><span>Bring it back with its webhooks and access.</span></div>
+            <Post action={`/admin/repos/${r.id}/restore`} label="Restore this repo" />
+          </div>
+        ) : (
+          <>
+            {live && (
+              <div class="row">
+                <div class="row-text">
+                  <strong>Change visibility</strong>
+                  <span>{r.public_at !== null ? "This repo is public: anyone can browse and clone it." : "This repo is private: only you and invitees can see it."}</span>
+                </div>
+                {r.public_at !== null
+                  ? <Post action={`/admin/repos/${r.id}/visibility`} name="public" value="0" label="Make private" class="danger" />
+                  : <Post action={`/admin/repos/${r.id}/visibility`} name="public" value="1" label="Make public" class="danger" />}
+              </div>
+            )}
+            <div class="row">
+              <div class="row-text"><strong>Delete this repo</strong><span>You can restore it later from the Repos page.</span></div>
+              <Post action={`/admin/repos/${r.id}/delete`} label="Delete this repo" class="danger" />
+            </div>
+          </>
+        )}
+      </div>
     </>
   );
 }
