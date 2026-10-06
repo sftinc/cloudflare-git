@@ -185,10 +185,14 @@ describe("repo settings page", () => {
     expect(saved.status).toBe(303);
     expect(saved.location).toBe(`/admin/repos/${id}`);
     expect((await repos.findRepoById(env.DB, id))!.description).toBe("Docs site");
-    expect((await call("GET", `/admin/repos/${id}`)).html).toContain('value="Docs site"');
+    const html = (await call("GET", `/admin/repos/${id}`)).html;
+    expect(html).toContain('value="Docs site"');
+    expect(html).toContain("341 characters remaining");
     await call("POST", `/admin/repos/${id}/description`, { description: "" });
     expect((await repos.findRepoById(env.DB, id))!.description).toBeNull();
-    const long = "x".repeat(201);
+    expect((await call("POST", `/admin/repos/${id}/description`, { description: "x".repeat(350) })).status).toBe(303);
+    await call("POST", `/admin/repos/${id}/description`, { description: "" });
+    const long = "x".repeat(351);
     const tooLong = await call("POST", `/admin/repos/${id}/description`, { description: long });
     expect(tooLong.status).toBe(422);
     expect(tooLong.html).toContain(`value="${long}"`);

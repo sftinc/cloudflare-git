@@ -21,6 +21,13 @@ window.addEventListener("pageshow", (event) => {
   if (event.persisted) document.querySelectorAll("button:disabled, input[type=submit]:disabled").forEach((b) => (b.disabled = false));
 });
 
+// Characters-remaining hints: <input maxlength data-remaining="hint-id">.
+document.addEventListener("input", (event) => {
+  const input = event.target;
+  const hint = input.dataset?.remaining && document.getElementById(input.dataset.remaining);
+  if (hint) hint.textContent = `${input.maxLength - input.value.length} characters remaining`;
+});
+
 // Dropdowns (<details class="menu|branches">): close on an outside click or Escape.
 const openDropdowns = () => document.querySelectorAll("details.menu[open], details.branches[open]");
 document.addEventListener("click", (event) => openDropdowns().forEach((d) => { if (!d.contains(event.target)) d.open = false; }));

@@ -9,6 +9,8 @@ import { Book, Download, Plus } from "./icons";
 
 const day = (ms: number) => fmtDate(Math.floor(ms / 1000));
 
+export const DESCRIPTION_MAX = 350; // same as GitHub
+
 export type RepoFormValues = { name?: string; description?: string; defaultBranch?: string; url?: string; branch?: string; visibility?: string };
 
 export function Secret(props: { title: string; value: string; children?: unknown }) {
@@ -150,6 +152,7 @@ export function AdminRepo(props: {
   secret?: { title: string; value: string }; error?: string; description?: string;
 }) {
   const r = props.repo;
+  const description = props.description ?? r.description ?? "";
   const live = r.deleted_at === null && r.provisioned_at !== null;
   return (
     <>
@@ -166,9 +169,10 @@ export function AdminRepo(props: {
             <form method="post" action={`/admin/repos/${r.id}/description`} class="row field-row">
               <label for="description">Description</label>
               <div class="inline">
-                <input type="text" id="description" name="description" maxlength={200} placeholder="Shown on the repo list" value={props.description ?? r.description ?? ""} />
+                <input type="text" id="description" name="description" maxlength={DESCRIPTION_MAX} placeholder="Short description of this repo" value={description} aria-describedby="description-remaining" data-remaining="description-remaining" />
                 <button type="submit">Save</button>
               </div>
+              <span class="hint" id="description-remaining">{Math.max(0, DESCRIPTION_MAX - description.length)} characters remaining</span>
             </form>
           </div>
           <h2 class="section-title">Webhooks</h2>

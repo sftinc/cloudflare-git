@@ -9,7 +9,7 @@ import { randomSecret, sha256Hex } from "../lib/crypto";
 import { provisionRepo, refreshProvisioning, type ProvisionInput, type ProvisionStatus } from "../provision";
 import { siteOrigin } from "../lib/site";
 import { page } from "../views/layout";
-import { ACCESS_LENGTHS, AdminInvites, AdminNewRepo, AdminRepo, AdminRepos, AdminTokens, REDEEM_WINDOWS, type RepoFormValues } from "../views/admin";
+import { ACCESS_LENGTHS, AdminInvites, DESCRIPTION_MAX, AdminNewRepo, AdminRepo, AdminRepos, AdminTokens, REDEEM_WINDOWS, type RepoFormValues } from "../views/admin";
 
 export const adminRoutes = new Hono<AppEnv>();
 
@@ -94,7 +94,7 @@ adminRoutes.post("/repos/:id/description", async (c) => {
   const repo = await findRepoById(c.env.DB, c.req.param("id"));
   if (!repo || repo.deleted_at !== null) return c.notFound();
   const description = str((await c.req.parseBody()).description);
-  if (description.length > 200) return repoPage(c, { error: "Keep the description to 200 characters or fewer.", description }, 422);
+  if (description.length > DESCRIPTION_MAX) return repoPage(c, { error: `Keep the description to ${DESCRIPTION_MAX} characters or fewer.`, description }, 422);
   await setDescription(c.env.DB, repo.id, description || null, Date.now());
   return c.redirect(`/admin/repos/${repo.id}`, 303);
 });
