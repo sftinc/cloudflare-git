@@ -20,3 +20,8 @@ document.addEventListener("submit", (event) => {
 window.addEventListener("pageshow", (event) => {
   if (event.persisted) document.querySelectorAll("button:disabled, input[type=submit]:disabled").forEach((b) => (b.disabled = false));
 });
+
+// Dropdowns (<details class="menu|branches">): close on an outside click or Escape.
+const openDropdowns = () => document.querySelectorAll("details.menu[open], details.branches[open]");
+document.addEventListener("click", (event) => openDropdowns().forEach((d) => { if (!d.contains(event.target)) d.open = false; }));
+document.addEventListener("keydown", (event) => { if (event.key === "Escape") openDropdowns().forEach((d) => (d.open = false)); });

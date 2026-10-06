@@ -4,7 +4,7 @@ import { raw } from "hono/html";
 import type { AppEnv } from "../index";
 import { isOwnerRequest } from "../auth/viewer";
 import { accessConfigured } from "../lib/site";
-import { LogIn, LogOut, Monitor, Moon, Plus, Sun } from "./icons";
+import { LogIn, LogOut, Monitor, Moon, Plus, Settings, Sun, User } from "./icons";
 
 function ThemeSwitch() {
   return (
@@ -56,9 +56,15 @@ export function Layout(props: { title: string; env: Env; admin?: boolean; owner?
               )}
               <ThemeSwitch />
               {accessConfigured(env) && (owner ? (
-                <a href="/cdn-cgi/access/logout" class="btn icon-btn" aria-label="Log out" title="Log out">
-                  <LogOut /><span class="label">Log out</span>
-                </a>
+                <details class="menu">
+                  <summary class="btn icon-btn" aria-label="Account" title="Account">
+                    <User /><span class="label">Account</span>
+                  </summary>
+                  <ul>
+                    <li><a href="/admin"><Settings /> Admin</a></li>
+                    <li><a href="/cdn-cgi/access/logout"><LogOut /> Log out</a></li>
+                  </ul>
+                </details>
               ) : (
                 <a href="/admin" class="btn icon-btn" aria-label="Log in" title="Log in">
                   <LogIn /><span class="label">Log in</span>
