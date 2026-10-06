@@ -57,6 +57,8 @@ describe("admin auth", () => {
     const r = await call("GET", "/admin");
     expect(r.status).toBe(200);
     expect(r.html).toContain('href="/admin/invites"');
+    expect(r.html).toContain('aria-label="Log out"'); // admin pages get a plain Log out, not the Account menu
+    expect(r.html).not.toContain('class="menu"');
     expect(r.html).toContain("No repositories yet");
     expect(r.html).not.toContain('action="/admin/repos"');
   });

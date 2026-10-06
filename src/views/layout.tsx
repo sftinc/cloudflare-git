@@ -55,7 +55,11 @@ export function Layout(props: { title: string; env: Env; admin?: boolean; owner?
                 </a>
               )}
               <ThemeSwitch />
-              {accessConfigured(env) && (owner ? (
+              {accessConfigured(env) && (owner && props.admin ? (
+                <a href="/cdn-cgi/access/logout" class="btn icon-btn" aria-label="Log out" title="Log out">
+                  <LogOut /><span class="label">Log out</span>
+                </a>
+              ) : owner ? (
                 <details class="menu">
                   <summary class="btn icon-btn" aria-label="Account" title="Account">
                     <User /><span class="label">Account</span>
