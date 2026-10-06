@@ -26,6 +26,7 @@ function check(name, ok, detail = "") {
   console.log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? `  (${detail})` : ""}`);
   if (!ok) throw new Error(`check failed: ${name}`);
 }
+const lines = (out) => out.split("\n").map((l) => l.trimEnd());
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const b64url = (buf) => Buffer.from(buf).toString("base64url");
 // wrangler dev drops idle keep-alive sockets; a request that lands on one fails with ECONNRESET
@@ -452,7 +453,7 @@ async function screenshots(ids, inviteForBrowser) {
     await shot("admin-invites", `${ORIGIN}/admin/invites`);
     await shot("admin-tokens", `${ORIGIN}/admin/tokens`);
     await submit(
-      "(() => { const f = document.querySelector('form[action=\"/admin/tokens\"]'); f.querySelector('input[name=name]').value = 'laptop'; f.submit(); })()",
+      "(() => { const f = document.querySelector('form[action=\"/admin/tokens\"]'); f.querySelector('input[name=name]').value = 'laptop'; f.querySelector('input[name=all]').checked = true; f.submit(); })()",
       "admin-token-created",
     );
     check("browser token form shows the new token", (await evaluate("!!document.querySelector('code#secret')")) === true);
@@ -561,7 +562,9 @@ async function main() {
   const accept = await fetch(link, { method: "POST", headers: { Origin: ORIGIN }, redirect: "manual" });
   const acceptHtml = await accept.text();
   const cookie = accept.headers.getSetCookie().map((c) => c.split(";")[0]).find((c) => c.startsWith("cg_invites="));
-  const cloneUrl = unescape(acceptHtml.match(/<code class="clone-url">([^<]*)<\/code>/)?.[1] ?? "");
+  // The page shows a `git credential approve` command with the clone password; clone with it inline.
+  const password = unescape(acceptHtml.match(/url=https?:\/\/x:([^@]+)@/)?.[1] ?? "");
+  const cloneUrl = password ? `http://x:${password}@localhost:${PORT}/r/${NAMES.priv}.git` : "";
   check("accepting the invite sets a cookie and shows a clone URL", accept.status === 200 && !!cookie && cloneUrl.startsWith("http://x:"));
   const clonePriv = gitStatus(["clone", "-q", cloneUrl, path.join(OUT, "clone-priv")]);
   check("clone private repo with the invite URL", clonePriv.code === 0, clonePriv.out);
@@ -574,7 +577,7 @@ async function main() {
   check("import accepted", !!impId, `status ${imp.status}`);
   let ready = false;
   for (const started = Date.now(); Date.now() - started < 120_000 && !ready; ) {
-    ready = (await (await admin("GET", `/admin/repos/${impId}`)).text()).includes("Ready");
+    ready = (await (await admin("GET", `/admin/repos/${impId}`)).text()).includes(`/admin/repos/${impId}/rename`); // settings appear once it's created
     if (!ready) await sleep(3000);
   }
   check("import becomes Ready", ready);
@@ -582,7 +585,7 @@ async function main() {
   const impPage = await fetch(`${ORIGIN}/r/${NAMES.imp}`);
   const impHtml = await impPage.text();
   check("imported repo page is 200", impPage.status === 200);
-  check("imported repo shows its default branch (master)", /Branch<\/span> <strong>master<\/strong>/.test(impHtml));
+  check("imported repo shows its default branch (master)", impHtml.includes("Default branch <strong>master</strong>"));
 
   // 13. Raw safety
   const rawPng = await fetch(`${ORIGIN}/r/${NAMES.pub}/blob/main/docs/arch.png?raw=1`);
@@ -610,8 +613,9 @@ async function main() {
   check("push to the old URL succeeds", pushMoved.code === 0, pushMoved.out);
   check(
     "push to the old URL prints the new location",
-    pushMoved.out.includes("remote: This repository moved. Please use the new location:\n") &&
-      pushMoved.out.includes(`remote:   ${ORIGIN}/r/${NAMES.moved}.git\n`) &&
+    // git pads side-band lines with spaces to clear the terminal line, so compare trimmed lines.
+    lines(pushMoved.out).includes("remote: This repository moved. Please use the new location:") &&
+      lines(pushMoved.out).includes(`remote:   ${ORIGIN}/r/${NAMES.moved}.git`) &&
       !pushMoved.out.includes("remote: remote:"),
     pushMoved.out,
   );
