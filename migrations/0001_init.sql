@@ -1,6 +1,7 @@
 CREATE TABLE repos (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
+  storage_name TEXT NOT NULL,
   description TEXT,
   public_at INTEGER,
   created_at INTEGER NOT NULL,
@@ -9,6 +10,17 @@ CREATE TABLE repos (
   deleted_at INTEGER
 );
 CREATE UNIQUE INDEX repos_name ON repos(name);
+CREATE UNIQUE INDEX repos_storage_name ON repos(storage_name);
+
+CREATE TABLE repo_aliases (
+  id TEXT PRIMARY KEY,
+  repo_id TEXT NOT NULL REFERENCES repos(id),
+  name TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  deleted_at INTEGER
+);
+CREATE UNIQUE INDEX repo_aliases_name ON repo_aliases(name) WHERE deleted_at IS NULL;
+CREATE INDEX repo_aliases_repo ON repo_aliases(repo_id);
 
 CREATE TABLE invites (
   id TEXT PRIMARY KEY,

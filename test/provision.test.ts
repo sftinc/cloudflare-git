@@ -41,6 +41,14 @@ describe("provisionRepo", () => {
     expect(r.ok && r.status).toBe("ready");
   });
 
+  it("refuses a name that is another repo's storage name", async () => {
+    const f = new FakeArtifacts();
+    await env.DB.prepare("INSERT INTO repos (id, name, storage_name, created_at, updated_at) VALUES ('x1', 'new-name', 'old-name', 1, 1)").run();
+    const r = await provisionRepo(env.DB, art(f), create("old-name"), 2);
+    expect(!r.ok && r.error).toBe('"old-name" is still the storage name of repo "new-name". Pick another name.');
+    expect(f.repos.has("old-name")).toBe(false);
+  });
+
   it("rejects names used by provisioned or deleted repos", async () => {
     const f = new FakeArtifacts();
     await provisionRepo(env.DB, art(f), create("p4"), 1);

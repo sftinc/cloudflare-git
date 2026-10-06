@@ -1,5 +1,5 @@
 import { artifactsErrorCode } from "./artifacts";
-import { findRepoByName, insertRepo, markProvisioned, type RepoRow } from "./db/repos";
+import { findRepoByName, findRepoByStorageName, insertRepo, markProvisioned, type RepoRow } from "./db/repos";
 
 export type ProvisionInput =
   | { kind: "create"; name: string; description: string; defaultBranch: string }
@@ -56,14 +56,19 @@ export async function provisionRepo(db: D1Database, art: Artifacts, input: Provi
       ? { ok: false, error: `A deleted repo named "${input.name}" exists. Restore it instead.`, restoreId: existing.id }
       : { ok: false, error: `A repo named "${input.name}" already exists.` };
   }
+  if (!existing) {
+    // A renamed repo keeps its old name as its Artifacts name, so that name can't be reused.
+    const holder = await findRepoByStorageName(db, input.name);
+    if (holder) return { ok: false, error: `"${input.name}" is still the storage name of repo "${holder.name}". Pick another name.` };
+  }
   const repo = existing ?? (await insertRepo(db, { name: input.name, description: input.description || null }, now));
   try {
     if (input.kind === "create") {
-      await art.create(input.name, { setDefaultBranch: input.defaultBranch || "main", ...(input.description ? { description: input.description } : {}) });
+      await art.create(repo.storage_name, { setDefaultBranch: input.defaultBranch || "main", ...(input.description ? { description: input.description } : {}) });
     } else {
       await art.import({
         source: { url: input.url, ...(input.branch ? { branch: input.branch } : {}) },
-        target: { name: input.name, ...(input.description ? { opts: { description: input.description } } : {}) },
+        target: { name: repo.storage_name, ...(input.description ? { opts: { description: input.description } } : {}) },
       });
     }
   } catch (err) {
@@ -78,7 +83,7 @@ export async function provisionRepo(db: D1Database, art: Artifacts, input: Provi
 
 export async function refreshProvisioning(db: D1Database, art: Artifacts, repo: RepoRow, now: number): Promise<ProvisionStatus> {
   try {
-    using _h = await art.get(repo.name);
+    using _h = await art.get(repo.storage_name);
     await markProvisioned(db, repo.id, now);
     return "ready";
   } catch (err) {

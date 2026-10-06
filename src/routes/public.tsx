@@ -22,7 +22,7 @@ export const publicRoutes = new Hono<AppEnv>();
 async function load(c: Context<AppEnv>): Promise<Loaded | null> {
   const repo = await findLiveRepo(c.env.DB, c.req.param("repo")!);
   if (!repo || !(await canView(c.env.DB, await getViewer(c), repo, Date.now()))) return null;
-  const { branches, head, tags } = await listBranches(c.env.ARTIFACTS, repo.name);
+  const { branches, head, tags } = await listBranches(c.env.ARTIFACTS, repo.storage_name);
   return { repo, branches, head, tags, cloneUrl: cloneUrl(siteOrigin(c), repo.name) };
 }
 
@@ -51,7 +51,7 @@ async function readLevels(h: ArtifactsRepo, rootTree: string, path: string) {
 }
 
 async function renderTree(c: Context<AppEnv>, l: Loaded, branch: string, path: string) {
-  using h = await c.env.ARTIFACTS.get(l.repo.name);
+  using h = await c.env.ARTIFACTS.get(l.repo.storage_name);
   const [commit] = await h.log({ ref: branch, limit: 1 });
   if (!commit) return c.notFound();
   const levels = await readLevels(h, commit.treeHash, path);
@@ -102,7 +102,7 @@ publicRoutes.get(`/r/:repo{${NAME}}/blob/*`, async (c) => {
   const r = l && rest(c, l, "blob");
   const at = l && r !== null ? splitRefPath(r, l.branches) : null;
   if (!l || !at || !at.path) return c.notFound();
-  using h = await c.env.ARTIFACTS.get(l.repo.name);
+  using h = await c.env.ARTIFACTS.get(l.repo.storage_name);
   let blob: Blob | null;
   try {
     blob = await h.readFile({ ref: at.branch, path: at.path });
@@ -153,7 +153,7 @@ publicRoutes.get(`/r/:repo{${NAME}}/commits/*`, async (c) => {
   const branch = l && rest(c, l, "commits");
   if (!l || !branch || !l.branches.includes(branch)) return c.notFound();
   const pageNo = Math.max(1, Number.parseInt(c.req.query("page") ?? "1", 10) || 1);
-  using h = await c.env.ARTIFACTS.get(l.repo.name);
+  using h = await c.env.ARTIFACTS.get(l.repo.storage_name);
   const list = await h.log({ ref: branch, limit: PER_PAGE + 1, offset: (pageNo - 1) * PER_PAGE });
   return page(
     c,

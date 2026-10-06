@@ -35,7 +35,7 @@ async function proxy(c: Context<AppEnv>, service: Service, upstreamPath: string)
   if (decision.kind === "notfound" || !repo) return c.text("Repository not found", 404);
   if (decision.pushTokenId) c.executionCtx.waitUntil(touchPushToken(c.env.DB, decision.pushTokenId, now));
 
-  const { remote, token } = await getRepoAccess(c.env.ARTIFACTS, repo.name, op === "push" ? "write" : "read");
+  const { remote, token } = await getRepoAccess(c.env.ARTIFACTS, repo.storage_name, op === "push" ? "write" : "read");
   const headers = new Headers({ Authorization: `Bearer ${token}` });
   for (const h of FORWARD) {
     const v = c.req.header(h);
@@ -52,7 +52,7 @@ async function proxy(c: Context<AppEnv>, service: Service, upstreamPath: string)
   const upstream = await fetch(`${remote}/${upstreamPath}`, { method: c.req.method, headers, body });
   if (!upstream.ok) {
     // 401/403 means our minted token is bad or expired (spike): drop it so the next request mints a new one.
-    if (upstream.status === 401 || upstream.status === 403) forgetRepoAccess(repo.name);
+    if (upstream.status === 401 || upstream.status === 403) forgetRepoAccess(repo.storage_name);
     console.error(JSON.stringify({ msg: "artifacts git error", ray: c.req.header("cf-ray"), repo: repo.name, service, status: upstream.status }));
     return c.text("Storage unavailable", 502);
   }

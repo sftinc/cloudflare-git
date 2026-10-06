@@ -145,7 +145,7 @@ adminRoutes.post("/repos/:id/webhooks/:hid/delete", async (c) => {
 adminRoutes.post("/repos/:id/direct-push", async (c) => {
   const repo = await findRepoById(c.env.DB, c.req.param("id"));
   if (!repo) return c.notFound();
-  using h = await c.env.ARTIFACTS.get(repo.name);
+  using h = await c.env.ARTIFACTS.get(repo.storage_name);
   const [{ remote }, token] = await Promise.all([h.info(), h.createToken("write", 3600)]);
   const url = new URL(remote);
   url.username = "x";
