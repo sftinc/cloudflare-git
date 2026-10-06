@@ -209,6 +209,7 @@ fieldset:has(input[name=all]:checked) label:has(input[name=repos]) { opacity: .4
   .grid-2, .repo-grid { grid-template-columns: 1fr; }
   .source-pick { grid-template-columns: 1fr; }
   header.site .wrap { flex-wrap: wrap; padding-top: 8px; padding-bottom: 8px; }
+  .admin-nav { order: 1; flex-basis: 100%; padding-bottom: 4px; } /* brand + buttons share row 1, nav takes row 2 */
   .site-actions { gap: 4px; }
   .site-actions .icon-btn { width: 44px; height: 44px; padding: 0; }
   .site-actions .label, .theme-seg { display: none; }
