@@ -109,10 +109,10 @@ invite instead (below).
 
 ## Moving repos in
 
-**Public repos: Import.** In `/admin`, "Import from a public URL". It copies the source's default
+**Public repos: Import.** In `/admin/repos/new`, choose **Import**. It copies the source's default
 branch (or the one branch you name) and **no tags** — that's how Artifacts import works.
 
-**Private repos, or every branch and tag: push them all.** Create an empty repo in `/admin` with
+**Private repos, or every branch and tag: push them all.** Create an empty repo in `/admin/repos/new` with
 the same default branch as the source, then:
 
 ```sh

@@ -47,7 +47,7 @@ async function reposPage(c: Context<AppEnv>) {
       }
     }
   }
-  return admin(c, "Repositories · admin", <AdminRepos repos={repos} pending={pending} />);
+  return admin(c, "Repos · admin", <AdminRepos repos={repos} pending={pending} />);
 }
 
 async function provision(c: Context<AppEnv>, input: ProvisionInput, values: RepoFormValues) {
@@ -56,11 +56,13 @@ async function provision(c: Context<AppEnv>, input: ProvisionInput, values: Repo
     await setPublic(c.env.DB, result.repo.id, values.visibility === "public", Date.now());
     return c.redirect(`/admin/repos/${result.repo.id}`, 303);
   }
-  return admin(c, "New repository · admin", <AdminNewRepo kind={input.kind} error={result.error} values={result.clearUrl ? { ...values, url: "" } : values} restoreId={result.restoreId} />, 422);
+  return admin(c, "New repo · admin", <AdminNewRepo kind={input.kind} error={result.error} values={result.clearUrl ? { ...values, url: "" } : values} restoreId={result.restoreId} />, 422);
 }
 
-adminRoutes.get("/", (c) => reposPage(c));
-adminRoutes.get("/new", (c) => admin(c, "New repository · admin", <AdminNewRepo kind={c.req.query("from") === "import" ? "import" : "create"} />));
+adminRoutes.get("/", (c) => c.redirect("/admin/repos", 302));
+adminRoutes.get("/repos", (c) => reposPage(c));
+// Before /repos/:id, so "new" is not read as an id.
+adminRoutes.get("/repos/new", (c) => admin(c, "New repo · admin", <AdminNewRepo kind={c.req.query("from") === "import" ? "import" : "create"} />));
 
 adminRoutes.post("/repos", async (c) => {
   const b = await c.req.parseBody();
@@ -96,7 +98,7 @@ adminRoutes.post("/repos/:id/visibility", async (c) => {
 
 adminRoutes.post("/repos/:id/delete", async (c) => {
   await setDeleted(c.env.DB, c.req.param("id"), true, Date.now());
-  return c.redirect("/admin", 303);
+  return c.redirect("/admin/repos", 303);
 });
 
 adminRoutes.post("/repos/:id/restore", async (c) => {

@@ -53,11 +53,11 @@ export function AdminRepos(props: { repos: RepoRow[]; pending: Set<string> }) {
   const deleted = props.repos.filter((r) => r.deleted_at !== null);
   return (
     <>
-      <h1 class="page-title">Repositories</h1>
+      <h1 class="page-title">Repos</h1>
       {live.length === 0 ? (
         <section class="card empty">
           <span class="empty-icon"><Book /></span>
-          <h2>No repositories yet</h2>
+          <h2>No repos yet</h2>
           <p class="muted">{NO_REPOS_OWNER}</p>
         </section>
       ) : (
@@ -102,14 +102,14 @@ export function AdminNewRepo(props: { kind: "create" | "import"; error?: string;
   const description = <label>Description <span class="hint">optional</span><input type="text" name="description" value={v.description ?? ""} /></label>;
   return (
     <>
-      <h1 class="page-title">New repository</h1>
+      <h1 class="page-title">New repo</h1>
       <div class="form-card">
         <nav class="source-pick" aria-label="Start from">
-          <a href="/admin/new" aria-current={create ? "page" : undefined}>
+          <a href="/admin/repos/new" aria-current={create ? "page" : undefined}>
             <span class="pick-icon"><Plus /></span>
             <span><strong>Empty</strong><span class="muted">Push your code to a new repository.</span></span>
           </a>
-          <a href="/admin/new?from=import" aria-current={create ? undefined : "page"}>
+          <a href="/admin/repos/new?from=import" aria-current={create ? undefined : "page"}>
             <span class="pick-icon"><Download /></span>
             <span><strong>Import</strong><span class="muted">Copy one branch from a public URL.</span></span>
           </a>
@@ -154,7 +154,7 @@ export function AdminRepo(props: {
   const statusText = r.provisioned_at !== null ? "Ready" : props.status === "pending" ? "Importing…" : "Not created";
   return (
     <>
-      <p><a href="/admin">← Repositories</a></p>
+      <p><a href="/admin/repos">← Repos</a></p>
       <h1 class="page-title">{r.name} {repoState(r, new Set(props.status === "pending" ? [r.id] : []))}</h1>
       <p class="muted">Status: {statusText}</p>
       {props.error && <div class="error">{props.error}</div>}
@@ -233,7 +233,7 @@ export function AdminInvites(props: { invites: (InviteRow & { repo_names: string
             <ExpirySelect name="access" selected="30d" />
           </label>
           <fieldset>
-            <legend>Repositories</legend>
+            <legend>Repos</legend>
             <label><input type="checkbox" name="all" value="1" /> All repositories, including new ones</label>
             {props.repos.map((r) => <label><input type="checkbox" name="repos" value={r.id} /> {r.name} {r.public_at === null ? "" : <span class="muted">(public)</span>}</label>)}
           </fieldset>
@@ -305,7 +305,7 @@ export function AdminTokens(props: { tokens: (PushTokenRow & { repo_names: strin
             <ExpirySelect name="expires" selected="never" />
           </label>
           <fieldset>
-            <legend>Repositories</legend>
+            <legend>Repos</legend>
             <label><input type="checkbox" name="all" value="1" /> All repositories, including new ones</label>
             {props.repos.map((r) => <label><input type="checkbox" name="repos" value={r.id} /> {r.name}</label>)}
           </fieldset>

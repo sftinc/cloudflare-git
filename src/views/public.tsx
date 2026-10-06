@@ -14,7 +14,7 @@ export function Home(props: { repos: RepoRow[]; owner: boolean }) {
   return (
     <>
       <div class="page-head">
-        <h1 class="page-title">Repositories</h1>
+        <h1 class="page-title">Repos</h1>
         <span class="muted">{props.repos.length}</span>
       </div>
       {props.repos.length === 0 ? (
@@ -22,12 +22,12 @@ export function Home(props: { repos: RepoRow[]; owner: boolean }) {
           <span class="empty-icon"><Book /></span>
           {props.owner ? (
             <>
-              <h2>No repositories yet</h2>
+              <h2>No repos yet</h2>
               <p class="muted">{NO_REPOS_OWNER}</p>
             </>
           ) : (
             <>
-              <h2>No repositories to show</h2>
+              <h2>No repos to show</h2>
               <p class="muted">There are no public repositories here yet. If you have an invite link, open it to see the repositories it covers.</p>
             </>
           )}
@@ -113,7 +113,7 @@ export function EmptyRepo(props: { repo: RepoRow; cloneUrl: string }) {
     <>
       <RepoHeader repo={props.repo} cloneUrl={props.cloneUrl} />
       <section class="card">
-        <h2>This repository is empty</h2>
+        <h2>This repo is empty</h2>
         <p class="muted">Push an existing repository from the command line:</p>
         <pre class="code"><code>{`git remote add origin ${props.cloneUrl}\ngit push -u origin main`}</code></pre>
       </section>

@@ -43,14 +43,14 @@ export function Layout(props: { title: string; env: Env; admin?: boolean; owner?
             </a>
             {props.admin && (
               <nav class="admin-nav">
-                <a href="/admin">Repos</a>
+                <a href="/admin/repos">Repos</a>
                 <a href="/admin/invites">Invites</a>
                 <a href="/admin/tokens">Push tokens</a>
               </nav>
             )}
             <div class="site-actions">
               {owner && (
-                <a href="/admin/new" class="btn primary icon-btn" aria-label="New repository" title="New repository">
+                <a href="/admin/repos/new" class="btn primary icon-btn" aria-label="New repo" title="New repo">
                   <Plus /><span class="label">New</span>
                 </a>
               )}
@@ -65,7 +65,7 @@ export function Layout(props: { title: string; env: Env; admin?: boolean; owner?
                     <User /><span class="label">Account</span>
                   </summary>
                   <ul>
-                    <li><a href="/admin"><Settings /> Admin</a></li>
+                    <li><a href="/admin/repos"><Settings /> Admin</a></li>
                     <li><a href="/cdn-cgi/access/logout"><LogOut /> Log out</a></li>
                   </ul>
                 </details>

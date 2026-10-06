@@ -64,7 +64,7 @@ async function renderTree(c: Context<AppEnv>, l: Loaded, branch: string, path: s
 publicRoutes.get("/", async (c) => {
   const viewer = await getViewer(c);
   const repos = await visibleRepos(c.env.DB, viewer, Date.now());
-  return page(c, "Repositories", <Home repos={repos} owner={viewer.owner} />);
+  return page(c, "Repos", <Home repos={repos} owner={viewer.owner} />);
 });
 
 publicRoutes.get(`/r/:repo{${NAME}}`, async (c) => {

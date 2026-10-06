@@ -63,15 +63,15 @@ describe("home", () => {
     expect(pub.body).not.toContain('href="/r/secret"');
     expect(pub.headers.get("content-security-policy")).toContain("default-src 'self'");
     expect(pub.body).toContain('<a href="/admin" class="btn icon-btn" aria-label="Log in"');
-    expect(pub.body).not.toContain("/admin/new");
+    expect(pub.body).not.toContain("/admin/repos/new");
     expect(pub.body).not.toContain("/cdn-cgi/access/logout");
     expect(pub.body).not.toContain('class="menu"');
     expect(pub.body).toContain('<link rel="icon" href="/static/favicon.svg"'); // else browsers 404 on /favicon.ico
     const own = await html("/", await ownerEnv({ ARTIFACTS: fake }), { cookie: `CF_Authorization=${await ownerToken()}` });
     expect(own.body).toContain('href="/r/secret"');
-    expect(own.body).toContain('href="/admin/new"');
+    expect(own.body).toContain('href="/admin/repos/new"');
     expect(own.body).toContain('href="/cdn-cgi/access/logout"');
-    expect(own.body).toContain('<li><a href="/admin">');
+    expect(own.body).toContain('<li><a href="/admin/repos">');
     expect(own.body).not.toContain('aria-label="Log in"');
   });
   it("uses defaults when the site vars are unset, and the vars when set", async () => {
@@ -94,10 +94,10 @@ describe("home", () => {
   it("shows an empty-state card", async () => {
     await env.DB.prepare("UPDATE repos SET public_at = NULL").run();
     const r = await html("/");
-    expect(r.body).toContain("No repositories to show");
-    expect(r.body).not.toContain("New repository");
+    expect(r.body).toContain("No repos to show");
+    expect(r.body).not.toContain("New repo");
     const own = await html("/", await ownerEnv({ ARTIFACTS: fake }), { cookie: `CF_Authorization=${await ownerToken()}` });
-    expect(own.body).not.toContain("No repositories");
+    expect(own.body).not.toContain("No repos");
   });
 });
 
@@ -126,7 +126,7 @@ describe("repo pages", () => {
   it("empty repos show push instructions", async () => {
     const { status, body } = await html("/r/empty");
     expect(status).toBe(200);
-    expect(body).toContain("This repository is empty");
+    expect(body).toContain("This repo is empty");
   });
   it("branches with slashes and encoded paths work", async () => {
     expect((await html("/r/site/tree/feature/login")).body).toContain('href="/r/site/blob/feature/login/login.ts"');

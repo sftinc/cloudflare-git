@@ -447,7 +447,7 @@ async function screenshots(ids, inviteForBrowser) {
     await scheme("light");
 
     await send("Network.setExtraHTTPHeaders", { headers: { "Cf-Access-Jwt-Assertion": jwt } });
-    await shot("admin-repos", `${ORIGIN}/admin`);
+    await shot("admin-repos", `${ORIGIN}/admin/repos`);
     await shot("admin-repo", `${ORIGIN}/admin/repos/${ids.pub}`);
     await shot("admin-invites", `${ORIGIN}/admin/invites`);
     await shot("admin-tokens", `${ORIGIN}/admin/tokens`);
