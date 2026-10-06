@@ -263,27 +263,28 @@ export function AdminTokens(props: { tokens: (PushTokenRow & { repo_names: strin
           <GitSetup origin={props.origin} password={props.created} />
         </Secret>
       )}
-      <div class="card table-scroll">
-        <table class="list">
-          <thead><tr><th>Name</th><th>Repos</th><th>Last used</th><th>Expires</th><th>Status</th><th></th></tr></thead>
-          <tbody>
-            {props.tokens.map((t) => (
-              <tr>
-                <td>{t.name}</td>
-                <td>{t.repo_names ?? <span class="muted">all</span>}</td>
-                <td class="muted">{t.last_used_at ? day(t.last_used_at) : "never"}</td>
-                <td class="muted">{t.expires_at ? day(t.expires_at) : "never"}</td>
-                <td>{t.revoked_at !== null ? <span class="badge bad">revoked</span> : t.expires_at !== null && t.expires_at <= props.now ? <span class="badge bad">expired</span> : <span class="badge ok">active</span>}</td>
-                <td class="actions">
-                  {t.revoked_at === null && <Post action={`/admin/tokens/${t.id}/revoke`} label="Revoke" />}
-                  <Post action={`/admin/tokens/${t.id}/delete`} label="Delete" class="danger" />
-                </td>
-              </tr>
-            ))}
-            {props.tokens.length === 0 && <tr><td colspan={6} class="muted">No tokens yet.</td></tr>}
-          </tbody>
-        </table>
-      </div>
+      {props.tokens.length > 0 && (
+        <div class="card table-scroll">
+          <table class="list">
+            <thead><tr><th>Name</th><th>Repos</th><th>Last used</th><th>Expires</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              {props.tokens.map((t) => (
+                <tr>
+                  <td>{t.name}</td>
+                  <td>{t.repo_names ?? <span class="muted">all</span>}</td>
+                  <td class="muted">{t.last_used_at ? day(t.last_used_at) : "never"}</td>
+                  <td class="muted">{t.expires_at ? day(t.expires_at) : "never"}</td>
+                  <td>{t.revoked_at !== null ? <span class="badge bad">revoked</span> : t.expires_at !== null && t.expires_at <= props.now ? <span class="badge bad">expired</span> : <span class="badge ok">active</span>}</td>
+                  <td class="actions">
+                    {t.revoked_at === null && <Post action={`/admin/tokens/${t.id}/revoke`} label="Revoke" />}
+                    <Post action={`/admin/tokens/${t.id}/delete`} label="Delete" class="danger" />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       <section class="card">
         <h2>New token</h2>
         <form method="post" action="/admin/tokens" class="stack">
