@@ -18,7 +18,7 @@ const HOOK_PORT = 8799;
 const NAMESPACE = "cloudflare-git-dev";
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const RUN = Date.now().toString(36);
-const NAMES = { pub: `e2e-${RUN}-site`, priv: `e2e-${RUN}-private`, imp: `e2e-${RUN}-import` };
+const NAMES = { pub: `e2e-${RUN}-site`, priv: `e2e-${RUN}-private`, imp: `e2e-${RUN}-import`, old: `e2e-${RUN}-old`, moved: `e2e-${RUN}-moved` };
 const checks = [];
 
 function check(name, ok, detail = "") {
@@ -507,7 +507,7 @@ async function main() {
 
   // 5. Setup through admin
   check("admin rejects requests without a JWT", (await fetch(`${ORIGIN}/admin`)).status === 404);
-  const tokenRes = await admin("POST", "/admin/tokens", { name: "e2e" });
+  const tokenRes = await admin("POST", "/admin/tokens", { name: "e2e", all: "1" });
   check("create push token", tokenRes.status === 200, `status ${tokenRes.status}`);
   const pushToken = secretOf(await tokenRes.text());
   const ids = { pub: await createRepo(NAMES.pub), priv: await createRepo(NAMES.priv) };
@@ -595,6 +595,33 @@ async function main() {
   check("text raw is text/plain", rawMd.headers.get("content-type") === "text/plain; charset=utf-8", rawMd.headers.get("content-type"));
   const notes = await fetch(`${ORIGIN}/r/${NAMES.pub}/blob/main/docs/${encodeURIComponent("my notes #1.md")}`);
   check("file with space and # in its name opens", notes.status === 200 && (await notes.text()).includes("Notes #1"));
+
+  // 13b. Rename: git and page links keep working at the old name, and a push there says where the repo moved
+  const oldId = await createRepo(NAMES.old);
+  await makePublic(oldId);
+  const pushOld = gitStatus(["push", pushUrl(NAMES.old), "main"], { cwd: WORK });
+  check("push to the repo before renaming", pushOld.code === 0, pushOld.out);
+  const renameRes = await admin("POST", `/admin/repos/${oldId}/rename`, { name: NAMES.moved });
+  check("rename the repo", renameRes.status === 303 && renameRes.headers.get("location") === `/admin/repos/${oldId}?renamed=1`, `status ${renameRes.status}`);
+  writeFiles({ "renamed.txt": "pushed to the old name\n" });
+  commit("Push to the old name after a rename");
+  const renamedSha = git(["rev-parse", "main"], { cwd: WORK });
+  const pushMoved = gitStatus(["push", pushUrl(NAMES.old), "main"], { cwd: WORK });
+  check("push to the old URL succeeds", pushMoved.code === 0, pushMoved.out);
+  check(
+    "push to the old URL prints the new location",
+    pushMoved.out.includes("remote: This repository moved. Please use the new location:\n") &&
+      pushMoved.out.includes(`remote:   ${ORIGIN}/r/${NAMES.moved}.git\n`) &&
+      !pushMoved.out.includes("remote: remote:"),
+    pushMoved.out,
+  );
+  check("new name has the pushed commit", git(["ls-remote", pushUrl(NAMES.moved), "refs/heads/main"]).startsWith(renamedSha));
+  const movedPage = await fetch(`${ORIGIN}/r/${NAMES.moved}`);
+  check("new name's page shows the pushed file", movedPage.status === 200 && (await movedPage.text()).includes("renamed.txt"));
+  const cloneOld = gitStatus(["clone", "-q", `${ORIGIN}/r/${NAMES.old}.git`, path.join(OUT, "clone-old")]);
+  check("clone from the old URL", cloneOld.code === 0 && git(["rev-parse", "HEAD"], { cwd: path.join(OUT, "clone-old") }) === renamedSha, cloneOld.out);
+  const oldPage = await fetch(`${ORIGIN}/r/${NAMES.old}`, { redirect: "manual" });
+  check("old page URL redirects to the new name", oldPage.status === 302 && oldPage.headers.get("location") === `/r/${NAMES.moved}`, `${oldPage.status} ${oldPage.headers.get("location")}`);
 
   // 14. Screenshots
   const browserInvite = await createInvite(ids.priv, "Alex");
