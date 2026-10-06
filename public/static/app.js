@@ -1,8 +1,13 @@
-// Copy buttons: <button data-copy="text">. No inline scripts (CSP).
+// Copy buttons: <button data-copy="text">, or data-copy-url="url" to copy what the URL returns. No inline scripts (CSP).
 document.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-copy]");
+  const button = event.target.closest("[data-copy], [data-copy-url]");
   if (!button) return;
-  navigator.clipboard.writeText(button.getAttribute("data-copy")).then(() => {
+  const url = button.getAttribute("data-copy-url");
+  // A ClipboardItem built from a promise keeps Safari's user-gesture permission across the fetch.
+  const copied = url
+    ? navigator.clipboard.write([new ClipboardItem({ "text/plain": fetch(url).then((r) => r.text()).then((t) => new Blob([t], { type: "text/plain" })) })])
+    : navigator.clipboard.writeText(button.getAttribute("data-copy"));
+  copied.then(() => {
     const label = button.innerHTML; // may be an icon
     button.textContent = "Copied";
     setTimeout(() => (button.innerHTML = label), 1500);

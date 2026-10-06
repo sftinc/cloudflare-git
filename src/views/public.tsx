@@ -2,7 +2,7 @@ import type { Child } from "hono/jsx";
 import { raw } from "hono/html";
 import type { RepoRow } from "../db/repos";
 import { blobHref, commitsHref, repoHref, treeHref } from "../render/paths";
-import { Book, Branch, Chevron, Clock, Copy, Download, File, Folder, Upload } from "./icons";
+import { Book, Branch, Chevron, ChevronRight, Clock, Copy, Download, File, Folder, Upload } from "./icons";
 
 export const NO_REPOS_OWNER = "Create an empty repository to push to, or import one from another host.";
 
@@ -114,6 +114,39 @@ function Crumbs(props: { repo: string; branch: string; path: string }) {
           {i === segs.length - 1 ? <span>{s}</span> : <a href={treeHref(props.repo, props.branch, segs.slice(0, i + 1).join("/"))}>{s}</a>}
         </>
       ))}
+      <button type="button" class="btn" data-copy={props.path} aria-label="Copy path" title="Copy path"><Copy /></button>
+    </nav>
+  );
+}
+
+/** The root folder plus each folder down to the current one, opened; other folders are links that open them. */
+function FileTree(props: { repo: string; branch: string; levels: ArtifactsTreeEntry[][]; current: string }) {
+  const open = props.current.split("/").filter(Boolean);
+  const level = (i: number, prefix: string): Child => (
+    <ul>
+      {props.levels[i].map((e) => {
+        const p = prefix ? `${prefix}/${e.name}` : e.name;
+        const here = p === props.current ? "page" : undefined;
+        if (e.type === "tree") {
+          const isOpen = i < props.levels.length - 1 && open[i] === e.name;
+          return (
+            <li>
+              <a href={treeHref(props.repo, props.branch, p)} class={isOpen ? "node dir open" : "node dir"} aria-current={here}>
+                {isOpen ? <Chevron /> : <ChevronRight />}<Folder />{e.name}
+              </a>
+              {isOpen && level(i + 1, p)}
+            </li>
+          );
+        }
+        if (e.type === "gitlink") return <li><span class="node"><span class="chev-space" /><Folder />{e.name}</span></li>;
+        return <li><a href={blobHref(props.repo, props.branch, p)} class="node" aria-current={here}><span class="chev-space" /><File />{e.name}</a></li>;
+      })}
+    </ul>
+  );
+  return (
+    <nav class="file-tree" aria-label="Files">
+      <h2>Files</h2>
+      {level(0, "")}
     </nav>
   );
 }
@@ -155,11 +188,12 @@ function About(props: { repo: RepoRow; branch: string; head: string | null; read
 }
 
 export function TreeView(props: {
-  repo: RepoRow; branch: string; branches: string[]; tags: string[]; head: string | null; path: string; entries: ArtifactsTreeEntry[];
+  repo: RepoRow; branch: string; branches: string[]; tags: string[]; head: string | null; path: string; levels: ArtifactsTreeEntry[][];
   commit: ArtifactsCommitMetadata; readme: string | null; readmeName: string | null; info: ArtifactsRepoInfo | null; cloneUrl: string; now: number;
 }) {
   const { repo, branch, path, commit } = props;
   const child = (name: string) => (path ? `${path}/${name}` : name);
+  const entries = props.levels[props.levels.length - 1];
   const files = (
     <div class="repo-main">
       {path && <Crumbs repo={repo.name} branch={branch} path={path} />}
@@ -176,7 +210,7 @@ export function TreeView(props: {
               <a href={treeHref(repo.name, branch, path.split("/").slice(0, -1).join("/"))} class="entry dir"><Folder />..</a>
             </li>
           )}
-          {props.entries.map((e) => (
+          {entries.map((e) => (
             <li>
               {e.type === "tree" ? (
                 <a class="entry dir" href={treeHref(repo.name, branch, child(e.name))}><Folder />{e.name}</a>
@@ -209,68 +243,105 @@ export function TreeView(props: {
           {files}
           <About repo={repo} branch={branch} head={props.head} readmeName={props.readmeName} info={props.info} cloneUrl={props.cloneUrl} now={props.now} />
         </div>
-      ) : files}
+      ) : (
+        <div class="split">
+          <FileTree repo={repo.name} branch={branch} levels={props.levels} current={path} />
+          {files}
+        </div>
+      )}
     </>
   );
 }
 
 export function BlobView(props: {
-  repo: RepoRow; branch: string; branches: string[]; path: string; cloneUrl: string; size: number;
+  repo: RepoRow; branch: string; branches: string[]; path: string; levels: ArtifactsTreeEntry[][]; size: number; lines: number;
   binary: boolean; truncated: boolean; html: string | null; markdown: boolean; showingSource: boolean;
 }) {
   const { repo, branch, path } = props;
   const base = blobHref(repo.name, branch, path);
+  const preview = props.markdown && !props.showingSource;
   return (
     <>
       <RepoHeader repo={repo}>
         <BranchSwitcher branches={props.branches} current={branch} href={(b) => treeHref(repo.name, b)} />
       </RepoHeader>
-      <Crumbs repo={repo.name} branch={branch} path={path} />
-      <div class="card file">
-        <div class="file-head">
-          <span class="muted">{fmtSize(props.size)}</span>
-          <span class="file-actions">
-            {props.markdown && (props.showingSource ? <a href={base}>Preview</a> : <a href={`${base}?source=1`}>Source</a>)}
-            <a href={`${base}?raw=1`}>Raw</a>
-          </span>
+      <div class="split">
+        <FileTree repo={repo.name} branch={branch} levels={props.levels} current={path} />
+        <div class="repo-main">
+          <Crumbs repo={repo.name} branch={branch} path={path} />
+          <div class="card file">
+            <div class="file-head">
+              <span class="muted">{props.binary ? fmtSize(props.size) : `${plural(props.lines, "line")} · ${fmtSize(props.size)}`}</span>
+              <span class="file-actions">
+                {props.markdown && (
+                  <nav class="segctl" aria-label="View">
+                    <a href={base} aria-current={preview ? "page" : undefined}>Preview</a>
+                    <a href={`${base}?source=1`} aria-current={preview ? undefined : "page"}>Code</a>
+                  </nav>
+                )}
+                <a class="btn" href={`${base}?raw=1`}>Raw</a>
+                {!props.binary && <button type="button" class="btn" data-copy-url={`${base}?raw=1`} aria-label="Copy file" title="Copy file"><Copy /></button>}
+              </span>
+            </div>
+            {props.truncated && <p class="notice">Showing the first 1 MB. <a href={`${base}?raw=1`}>View the whole file</a>.</p>}
+            {props.binary ? (
+              <p class="notice">Binary file not shown. <a href={`${base}?raw=1`}>Download</a></p>
+            ) : preview ? (
+              <article class="markdown">{raw(props.html ?? "")}</article>
+            ) : (
+              <div class="code-lines">
+                <div class="ln" aria-hidden="true">{Array.from({ length: Math.max(1, props.lines) }, (_, i) => i + 1).join("\n")}</div>
+                <pre class="code"><code class="hljs">{raw(props.html ?? "")}</code></pre>
+              </div>
+            )}
+          </div>
         </div>
-        {props.truncated && <p class="notice">Showing the first 1 MB. <a href={`${base}?raw=1`}>View the whole file</a>.</p>}
-        {props.binary ? (
-          <p class="notice">Binary file not shown. <a href={`${base}?raw=1`}>Download</a></p>
-        ) : props.markdown && !props.showingSource ? (
-          <article class="markdown">{raw(props.html ?? "")}</article>
-        ) : (
-          <pre class="code"><code class="hljs">{raw(props.html ?? "")}</code></pre>
-        )}
       </div>
     </>
   );
 }
 
+const fmtDayLong = (sec: number) => new Date(sec * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+
 export function Commits(props: {
-  repo: RepoRow; branch: string; branches: string[]; commits: ArtifactsCommitMetadata[]; page: number; hasNext: boolean; cloneUrl: string;
+  repo: RepoRow; branch: string; branches: string[]; commits: ArtifactsCommitMetadata[]; page: number; hasNext: boolean; now: number;
 }) {
   const { repo, branch } = props;
   const href = (p: number) => `${commitsHref(repo.name, branch)}?page=${p}`;
+  const days: { day: string; commits: ArtifactsCommitMetadata[] }[] = [];
+  for (const c of props.commits) {
+    const day = fmtDayLong(c.committedAt);
+    if (days[days.length - 1]?.day === day) days[days.length - 1].commits.push(c);
+    else days.push({ day, commits: [c] });
+  }
   return (
     <>
       <RepoHeader repo={repo}>
         <BranchSwitcher branches={props.branches} current={branch} href={(b) => commitsHref(repo.name, b)} />
-        <a class="toolbar-link" href={treeHref(repo.name, branch)}><Folder /> Files</a>
       </RepoHeader>
-      <ul class="card commits">
-        {props.commits.map((c) => (
-          <li>
-            <span class="commit-msg">{firstLine(c.message)}</span>
-            <span class="muted">{c.author.name} · {fmtDate(c.committedAt)}</span>
-            <code class="sha">{c.hash.slice(0, 7)}</code>
-          </li>
-        ))}
-      </ul>
-      <nav class="pager">
-        {props.page > 1 && <a href={href(props.page - 1)}>← Newer</a>}
-        {props.hasNext && <a href={href(props.page + 1)}>Older →</a>}
-      </nav>
+      {days.map((d) => (
+        <>
+          <h2 class="commit-day"><Clock /> Commits on {d.day}</h2>
+          <ul class="card commits">
+            {d.commits.map((c) => (
+              <li>
+                <span class="commit-text">
+                  <span class="commit-msg">{firstLine(c.message)}</span>
+                  <span class="muted"><strong>{c.author.name}</strong> committed {fmtAgo(c.committedAt * 1000, props.now)}</span>
+                </span>
+                <code class="sha">{c.hash.slice(0, 7)}</code>
+                <button type="button" class="btn" data-copy={c.hash} aria-label="Copy full SHA" title="Copy full SHA"><Copy /></button>
+              </li>
+            ))}
+          </ul>
+        </>
+      ))}
+      {(props.page > 1 || props.hasNext) && (
+        <nav class="pager">
+          {props.page > 1 ? <a class="btn" href={href(props.page - 1)}>← Newer</a> : <span class="btn" aria-disabled="true">← Newer</span>}
+          {props.hasNext ? <a class="btn" href={href(props.page + 1)}>Older →</a> : <span class="btn" aria-disabled="true">Older →</span>}
+        </nav>
+      )}
     </>
   );
 }

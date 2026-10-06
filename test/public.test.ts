@@ -3,7 +3,7 @@ import { env } from "cloudflare:test";
 import { clearArtifactsCaches } from "../src/artifacts";
 import { resetAccessKeys } from "../src/auth/access-jwt";
 import * as repos from "../src/db/repos";
-import { FakeArtifacts } from "./helpers/fake-artifacts";
+import { FakeArtifacts, fakeHash } from "./helpers/fake-artifacts";
 import { makeEnv, request } from "./helpers/env";
 import { stubArtifactsGit } from "./helpers/git-http";
 import { ownerEnv, ownerToken } from "./helpers/jwt";
@@ -171,6 +171,30 @@ describe("repo pages", () => {
 });
 
 describe("files", () => {
+  it("shows a file tree opened down to the current file, on a wide page", async () => {
+    const r = await html("/r/site/blob/main/docs/guide.md");
+    expect(r.body).toContain('<body class="wide">');
+    const tree = r.body.split('<nav class="file-tree"')[1].split("</nav>")[0];
+    expect(tree).toContain('href="/r/site/tree/main/src"'); // root siblings
+    expect(tree).toContain('href="/r/site/blob/main/docs/my%20file%20%231.txt"'); // the open folder's files
+    expect(tree).toContain('<a href="/r/site/blob/main/docs/guide.md" class="node" aria-current="page">');
+    expect(tree).not.toContain("index.ts"); // closed folders stay closed
+    const dir = await html("/r/site/tree/main/docs");
+    expect(dir.body).toContain('<a href="/r/site/tree/main/docs" class="node dir open" aria-current="page">');
+    expect((await html("/r/site")).body).not.toContain('class="file-tree"');
+  });
+  it("numbers lines and counts them in the header", async () => {
+    const r = await html("/r/site/blob/main/README.md?source=1");
+    expect(r.body).toContain('<div class="ln" aria-hidden="true">1\n2\n3\n4\n5</div>');
+    expect(r.body).toContain("5 lines · ");
+    expect(r.body).toContain('data-copy-url="/r/site/blob/main/README.md?raw=1"');
+  });
+  it("switches markdown between Preview and Code", async () => {
+    const preview = await html("/r/site/blob/main/docs/guide.md");
+    expect(preview.body).toContain('<a href="/r/site/blob/main/docs/guide.md" aria-current="page">Preview</a>');
+    expect(preview.body).toContain('<a href="/r/site/blob/main/docs/guide.md?source=1">Code</a>');
+    expect((await html("/r/site/blob/main/docs/guide.md?source=1")).body).toContain('<a href="/r/site/blob/main/docs/guide.md?source=1" aria-current="page">Code</a>');
+  });
   it("highlights code", async () => {
     expect((await html("/r/site/blob/main/src/index.ts")).body).toContain("hljs-keyword");
   });
@@ -222,6 +246,14 @@ describe("commits", () => {
     const p2 = await html("/r/site/commits/main?page=2");
     expect(p2.body).toContain("Commit 5");
     expect(p2.body).not.toContain("?page=3");
+  });
+  it("groups commits by day, with the full SHA to copy", async () => {
+    const r = await html("/r/site/commits/main");
+    expect(r.body).toContain("Commits on Oct 9, 2025");
+    expect(r.body).toContain("Commits on Oct 8, 2025");
+    expect(r.body).toContain(`data-copy="${fakeHash("commit:main:0")}"`);
+    expect(r.body).toContain('aria-disabled="true">← Newer');
+    expect((await html("/r/site/commits/feature/login")).body).not.toContain('class="pager"'); // one page: no pager
   });
 });
 

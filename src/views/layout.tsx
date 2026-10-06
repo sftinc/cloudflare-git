@@ -23,7 +23,7 @@ function ThemeSwitch() {
 
 type AdminSection = "repos" | "invites" | "tokens";
 
-export function Layout(props: { title: string; env: Env; admin?: boolean; section?: AdminSection; owner?: boolean; children?: Child }) {
+export function Layout(props: { title: string; env: Env; admin?: boolean; section?: AdminSection; owner?: boolean; wide?: boolean; children?: Child }) {
   const { env, owner } = props;
   return (
     <html lang="en">
@@ -36,7 +36,7 @@ export function Layout(props: { title: string; env: Env; admin?: boolean; sectio
         <script src="/static/theme.js"></script>
         <script src="/static/app.js" defer></script>
       </head>
-      <body>
+      <body class={props.wide ? "wide" : undefined}>
         <header class="site">
           <div class="wrap">
             <a href="/" class="brand">
@@ -91,13 +91,13 @@ export function Layout(props: { title: string; env: Env; admin?: boolean; sectio
   );
 }
 
-export async function page(c: Context<AppEnv>, title: string, body: Child, status = 200, opts: { admin?: boolean } = {}) {
+export async function page(c: Context<AppEnv>, title: string, body: Child, status = 200, opts: { admin?: boolean; wide?: boolean } = {}) {
   const owner = opts.admin || (await isOwnerRequest(c));
   const section = opts.admin ? (/^\/admin\/(repos|invites|tokens)\b/.exec(c.req.path)?.[1] as AdminSection | undefined) : undefined;
   return c.html(
     <>
       {raw("<!doctype html>")}
-      <Layout title={title} env={c.env} admin={opts.admin} section={section} owner={owner}>
+      <Layout title={title} env={c.env} admin={opts.admin} section={section} owner={owner} wide={opts.wide}>
         {body}
       </Layout>
     </>,

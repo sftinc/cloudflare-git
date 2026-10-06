@@ -33,24 +33,30 @@ function rest(c: Context<AppEnv>, l: Loaded, kind: string): string | null {
   return pathname.startsWith(prefix) ? decodePath(pathname.slice(prefix.length)) : null;
 }
 
-async function readDir(h: ArtifactsRepo, rootTree: string, path: string) {
-  let entries = await h.readTree(rootTree);
+const sortEntries = (entries: ArtifactsTreeEntry[]) =>
+  [...entries].sort((a, b) => ((a.type === "tree") === (b.type === "tree") ? a.name.localeCompare(b.name) : a.type === "tree" ? -1 : 1));
+
+/** The root folder and each folder down to `path`, sorted: the file tree's open levels. The last is `path` itself. */
+async function readLevels(h: ArtifactsRepo, rootTree: string, path: string) {
+  const root = await h.readTree(rootTree);
+  if (!root) return null;
+  const levels = [sortEntries(root)];
   for (const seg of path.split("/").filter(Boolean)) {
-    const next = entries?.find((e) => e.name === seg && e.type === "tree");
-    if (!next) return null;
-    entries = await h.readTree(next.hash);
+    const next = levels[levels.length - 1].find((e) => e.name === seg && e.type === "tree");
+    const entries = next && (await h.readTree(next.hash));
+    if (!entries) return null;
+    levels.push(sortEntries(entries));
   }
-  return entries
-    ? [...entries].sort((a, b) => ((a.type === "tree") === (b.type === "tree") ? a.name.localeCompare(b.name) : a.type === "tree" ? -1 : 1))
-    : null;
+  return levels;
 }
 
 async function renderTree(c: Context<AppEnv>, l: Loaded, branch: string, path: string) {
   using h = await c.env.ARTIFACTS.get(l.repo.name);
   const [commit] = await h.log({ ref: branch, limit: 1 });
   if (!commit) return c.notFound();
-  const entries = await readDir(h, commit.treeHash, path);
-  if (!entries) return c.notFound();
+  const levels = await readLevels(h, commit.treeHash, path);
+  if (!levels) return c.notFound();
+  const entries = levels[levels.length - 1];
   // The repo's own page (not a subfolder) gets the About card.
   const info = path ? null : await h.info();
   let readme: string | null = null;
@@ -60,8 +66,14 @@ async function renderTree(c: Context<AppEnv>, l: Loaded, branch: string, path: s
     if (blob) readme = renderMarkdown(await blob.slice(0, MAX_VIEW_BYTES).text(), { repo: l.repo.name, branch, dir: path });
   }
   const title = path ? `${path} · ${l.repo.name}` : l.repo.name;
-  return page(c, title, <TreeView repo={l.repo} branch={branch} branches={l.branches} tags={l.tags} head={l.head} path={path} entries={entries} commit={commit}
-      readme={readme} readmeName={readmeEntry?.name ?? null} info={info} cloneUrl={l.cloneUrl} now={Date.now()} />);
+  return page(
+    c,
+    title,
+    <TreeView repo={l.repo} branch={branch} branches={l.branches} tags={l.tags} head={l.head} path={path} levels={levels} commit={commit}
+      readme={readme} readmeName={readmeEntry?.name ?? null} info={info} cloneUrl={l.cloneUrl} now={Date.now()} />,
+    200,
+    { wide: !!path }, // subfolders get the file tree
+  );
 }
 
 publicRoutes.get("/", async (c) => {
@@ -101,6 +113,9 @@ publicRoutes.get(`/r/:repo{${NAME}}/blob/*`, async (c) => {
     throw err;
   }
   if (!blob) return c.notFound();
+  const [commit] = await h.log({ ref: at.branch, limit: 1 });
+  const levels = commit && (await readLevels(h, commit.treeHash, at.path.split("/").slice(0, -1).join("/")));
+  if (!levels) return c.notFound();
   const binary = new Uint8Array(await blob.slice(0, 8192).arrayBuffer()).includes(0);
   const filename = at.path.split("/").pop()!;
 
@@ -117,15 +132,19 @@ publicRoutes.get(`/r/:repo{${NAME}}/blob/*`, async (c) => {
   const showingSource = c.req.query("source") !== undefined;
   const dir = at.path.split("/").slice(0, -1).join("/");
   let html: string | null = null;
+  let lines = 0;
   if (!binary) {
     const text = await blob.slice(0, MAX_VIEW_BYTES).text();
+    lines = text === "" ? 0 : text.split("\n").length - (text.endsWith("\n") ? 1 : 0);
     html = markdown && !showingSource ? renderMarkdown(text, { repo: l.repo.name, branch: at.branch, dir }) : highlightCode(text, filename);
   }
   return page(
     c,
     `${filename} · ${l.repo.name}`,
-    <BlobView repo={l.repo} branch={at.branch} branches={l.branches} path={at.path} cloneUrl={l.cloneUrl} size={blob.size}
+    <BlobView repo={l.repo} branch={at.branch} branches={l.branches} path={at.path} levels={levels} size={blob.size} lines={lines}
       binary={binary} truncated={!binary && blob.size > MAX_VIEW_BYTES} html={html} markdown={markdown} showingSource={showingSource} />,
+    200,
+    { wide: true },
   );
 });
 
@@ -139,6 +158,6 @@ publicRoutes.get(`/r/:repo{${NAME}}/commits/*`, async (c) => {
   return page(
     c,
     `Commits · ${l.repo.name}`,
-    <Commits repo={l.repo} branch={branch} branches={l.branches} commits={list.slice(0, PER_PAGE)} page={pageNo} hasNext={list.length > PER_PAGE} cloneUrl={l.cloneUrl} />,
+    <Commits repo={l.repo} branch={branch} branches={l.branches} commits={list.slice(0, PER_PAGE)} page={pageNo} hasNext={list.length > PER_PAGE} now={Date.now()} />,
   );
 });
