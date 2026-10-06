@@ -34,9 +34,9 @@ a:hover { text-decoration: underline; }
 code, pre { font-family: var(--mono); font-size: 13px; }
 .wrap { max-width: 1040px; margin: 0 auto; padding: 0 16px; }
 main.wrap { flex: 1; width: 100%; padding-top: 32px; padding-bottom: 64px; }
-/* Admin: one 760px column, left-aligned under the logo; forms fill their cards. */
-main.admin > * { max-width: 760px; }
-main.admin form.stack { max-width: none; }
+/* Admin forms are as wide as a repo card on the home page (half the column); tables and info stay full width. */
+.form-card { max-width: calc(50% - 7px); }
+.form-card form.stack { max-width: none; }
 .icon { width: 16px; height: 16px; flex: none; vertical-align: -3px; }
 .muted { color: var(--muted); }
 
@@ -208,6 +208,7 @@ fieldset:has(input[name=all]:checked) label:has(input[name=repos]) { opacity: .4
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 @media (max-width: 720px) {
   .grid-2, .repo-grid { grid-template-columns: 1fr; }
+  .form-card { max-width: none; }
   .source-pick { grid-template-columns: 1fr; }
   header.site .wrap { flex-wrap: wrap; padding-top: 8px; padding-bottom: 8px; }
   .admin-nav { order: 1; flex-basis: 100%; padding-bottom: 4px; } /* brand + buttons share row 1, nav takes row 2 */

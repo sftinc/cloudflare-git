@@ -103,42 +103,44 @@ export function AdminNewRepo(props: { kind: "create" | "import"; error?: string;
   return (
     <>
       <h1 class="page-title">New repository</h1>
-      <nav class="source-pick" aria-label="Start from">
-        <a href="/admin/new" aria-current={create ? "page" : undefined}>
-          <span class="pick-icon"><Plus /></span>
-          <span><strong>Empty</strong><span class="muted">Push your code to a new repository.</span></span>
-        </a>
-        <a href="/admin/new?from=import" aria-current={create ? undefined : "page"}>
-          <span class="pick-icon"><Download /></span>
-          <span><strong>Import</strong><span class="muted">Copy one branch from a public URL.</span></span>
-        </a>
-      </nav>
-      {props.error && (
-        <div class="error">
-          {props.error} {props.restoreId && <Post action={`/admin/repos/${props.restoreId}/restore`} label="Restore it" class="link" />}
-        </div>
-      )}
-      <section class="card">
-        {create ? (
-          <form method="post" action="/admin/repos" class="stack">
-            {name}
-            {description}
-            <label>Default branch<input type="text" name="defaultBranch" value={v.defaultBranch || "main"} /></label>
-            <VisibilitySelect private={v.visibility === "private"} />
-            <button type="submit" class="primary">Create repository</button>
-          </form>
-        ) : (
-          <form method="post" action="/admin/import" class="stack">
-            <label>Source URL<input type="url" name="url" required placeholder="https://github.com/you/repo" value={v.url ?? ""} /></label>
-            <label>Branch <span class="hint">optional, defaults to the source's default</span><input type="text" name="branch" value={v.branch ?? ""} /></label>
-            <p class="hint">Imports one branch and no tags. For every branch and tag, create an empty repository and push a mirror (see README).</p>
-            {name}
-            {description}
-            <VisibilitySelect private={v.visibility === "private"} />
-            <button type="submit" class="primary">Import repository</button>
-          </form>
+      <div class="form-card">
+        <nav class="source-pick" aria-label="Start from">
+          <a href="/admin/new" aria-current={create ? "page" : undefined}>
+            <span class="pick-icon"><Plus /></span>
+            <span><strong>Empty</strong><span class="muted">Push your code to a new repository.</span></span>
+          </a>
+          <a href="/admin/new?from=import" aria-current={create ? undefined : "page"}>
+            <span class="pick-icon"><Download /></span>
+            <span><strong>Import</strong><span class="muted">Copy one branch from a public URL.</span></span>
+          </a>
+        </nav>
+        {props.error && (
+          <div class="error">
+            {props.error} {props.restoreId && <Post action={`/admin/repos/${props.restoreId}/restore`} label="Restore it" class="link" />}
+          </div>
         )}
-      </section>
+        <section class="card">
+          {create ? (
+            <form method="post" action="/admin/repos" class="stack">
+              {name}
+              {description}
+              <label>Default branch<input type="text" name="defaultBranch" value={v.defaultBranch || "main"} /></label>
+              <VisibilitySelect private={v.visibility === "private"} />
+              <button type="submit" class="primary">Create repository</button>
+            </form>
+          ) : (
+            <form method="post" action="/admin/import" class="stack">
+              <label>Source URL<input type="url" name="url" required placeholder="https://github.com/you/repo" value={v.url ?? ""} /></label>
+              <label>Branch <span class="hint">optional, defaults to the source's default</span><input type="text" name="branch" value={v.branch ?? ""} /></label>
+              <p class="hint">Imports one branch and no tags. For every branch and tag, create an empty repository and push a mirror (see README).</p>
+              {name}
+              {description}
+              <VisibilitySelect private={v.visibility === "private"} />
+              <button type="submit" class="primary">Import repository</button>
+            </form>
+          )}
+        </section>
+      </div>
     </>
   );
 }
@@ -220,7 +222,7 @@ export function AdminInvites(props: { invites: (InviteRow & { repo_names: string
       <h1 class="page-title">Invites</h1>
       {props.error && <div class="error">{props.error}</div>}
       {props.link && <Secret title="Invite link" value={props.link} />}
-      <section class="card">
+      <section class="card form-card">
         <h2>New invite</h2>
         <form method="post" action="/admin/invites" class="stack">
           <label>Who is it for?<input type="text" name="label" required placeholder="Sam" /></label>
@@ -295,7 +297,7 @@ export function AdminTokens(props: { tokens: (PushTokenRow & { repo_names: strin
           </table>
         </div>
       )}
-      <section class="card">
+      <section class="card form-card">
         <h2>New token</h2>
         <form method="post" action="/admin/tokens" class="stack">
           <label>Name<input type="text" name="name" required placeholder="laptop" /></label>
