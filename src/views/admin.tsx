@@ -216,6 +216,7 @@ export function AdminInvites(props: { invites: (InviteRow & { repo_names: string
           <label>Who is it for?<input type="text" name="label" required placeholder="Sam" /></label>
           <fieldset>
             <legend>Repositories</legend>
+            <label><input type="checkbox" name="all" value="1" /> All repositories, including new ones</label>
             {props.repos.map((r) => <label><input type="checkbox" name="repos" value={r.id} /> {r.name} {r.public_at === null ? "" : <span class="muted">(public)</span>}</label>)}
           </fieldset>
           <label>Link must be opened within
@@ -227,31 +228,32 @@ export function AdminInvites(props: { invites: (InviteRow & { repo_names: string
           <button type="submit" class="primary">Create invite link</button>
         </form>
       </section>
-      <div class="card table-scroll">
-        <table class="list">
-          <thead><tr><th>For</th><th>Repos</th><th>Status</th><th>Expires</th><th></th></tr></thead>
-          <tbody>
-            {props.invites.map((i) => (
-              <tr>
-                <td>{i.label}</td>
-                <td>{i.repo_names || <span class="muted">none</span>}</td>
-                <td><span class={`badge ${i.status === "active" ? "ok" : i.status === "waiting" ? "warn" : "bad"}`}>{i.status}</span></td>
-                <td class="muted">{i.redeemed_at === null ? `open by ${day(i.redeem_by_at)}` : i.access_expires_at === null ? "never" : day(i.access_expires_at)}</td>
-                <td class="actions">
-                  {i.revoked_at === null && <Post action={`/admin/invites/${i.id}/revoke`} label="Revoke" />}
-                  <Post action={`/admin/invites/${i.id}/delete`} label="Delete" class="danger" />
-                </td>
-              </tr>
-            ))}
-            {props.invites.length === 0 && <tr><td colspan={5} class="muted">No invites yet.</td></tr>}
-          </tbody>
-        </table>
-      </div>
+      {props.invites.length > 0 && (
+        <div class="card table-scroll">
+          <table class="list">
+            <thead><tr><th>For</th><th>Repos</th><th>Status</th><th>Expires</th><th></th></tr></thead>
+            <tbody>
+              {props.invites.map((i) => (
+                <tr>
+                  <td>{i.label}</td>
+                  <td>{i.all_repos_at !== null ? "All repositories" : i.repo_names || <span class="muted">none</span>}</td>
+                  <td><span class={`badge ${i.status === "active" ? "ok" : i.status === "waiting" ? "warn" : "bad"}`}>{i.status}</span></td>
+                  <td class="muted">{i.redeemed_at === null ? `open by ${day(i.redeem_by_at)}` : i.access_expires_at === null ? "never" : day(i.access_expires_at)}</td>
+                  <td class="actions">
+                    {i.revoked_at === null && <Post action={`/admin/invites/${i.id}/revoke`} label="Revoke" />}
+                    <Post action={`/admin/invites/${i.id}/delete`} label="Delete" class="danger" />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </>
   );
 }
 
-export function AdminTokens(props: { tokens: (PushTokenRow & { repo_names: string | null })[]; repos: RepoRow[]; created?: string; origin: string; error?: string }) {
+export function AdminTokens(props: { tokens: (PushTokenRow & { repo_names: string | null })[]; repos: RepoRow[]; now: number; created?: string; origin: string; error?: string }) {
   return (
     <>
       <h1 class="page-title">Push tokens</h1>
@@ -263,21 +265,22 @@ export function AdminTokens(props: { tokens: (PushTokenRow & { repo_names: strin
       )}
       <div class="card table-scroll">
         <table class="list">
-          <thead><tr><th>Name</th><th>Repos</th><th>Last used</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Repos</th><th>Last used</th><th>Expires</th><th>Status</th><th></th></tr></thead>
           <tbody>
             {props.tokens.map((t) => (
               <tr>
                 <td>{t.name}</td>
                 <td>{t.repo_names ?? <span class="muted">all</span>}</td>
                 <td class="muted">{t.last_used_at ? day(t.last_used_at) : "never"}</td>
-                <td>{t.revoked_at === null ? <span class="badge ok">active</span> : <span class="badge bad">revoked</span>}</td>
+                <td class="muted">{t.expires_at ? day(t.expires_at) : "never"}</td>
+                <td>{t.revoked_at !== null ? <span class="badge bad">revoked</span> : t.expires_at !== null && t.expires_at <= props.now ? <span class="badge bad">expired</span> : <span class="badge ok">active</span>}</td>
                 <td class="actions">
                   {t.revoked_at === null && <Post action={`/admin/tokens/${t.id}/revoke`} label="Revoke" />}
                   <Post action={`/admin/tokens/${t.id}/delete`} label="Delete" class="danger" />
                 </td>
               </tr>
             ))}
-            {props.tokens.length === 0 && <tr><td colspan={5} class="muted">No tokens yet.</td></tr>}
+            {props.tokens.length === 0 && <tr><td colspan={6} class="muted">No tokens yet.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -285,6 +288,9 @@ export function AdminTokens(props: { tokens: (PushTokenRow & { repo_names: strin
         <h2>New token</h2>
         <form method="post" action="/admin/tokens" class="stack">
           <label>Name<input type="text" name="name" required placeholder="laptop" /></label>
+          <label>Expires
+            <select name="expires"><option value="never" selected>Never</option><option value="7d">In 7 days</option><option value="30d">In 30 days</option><option value="1y">In 1 year</option></select>
+          </label>
           {props.repos.length > 0 && (
             <fieldset>
               <legend>Limit to repos <span class="hint">none checked = all repos</span></legend>

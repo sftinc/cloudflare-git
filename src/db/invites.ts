@@ -13,23 +13,27 @@ export type InviteRow = {
   revoked_at: number | null;
   created_at: number;
   updated_at: number;
+  all_repos_at: number | null;
   deleted_at: number | null;
 };
 
 const VALID = `i.deleted_at IS NULL AND i.revoked_at IS NULL AND i.redeemed_at IS NOT NULL
-  AND (i.access_expires_at IS NULL OR i.access_expires_at > ?) AND ir.deleted_at IS NULL`;
+  AND (i.access_expires_at IS NULL OR i.access_expires_at > ?)`;
+/** Invite i covers repo r: it was made for all repos, or it lists r. */
+const COVERS = `(i.all_repos_at IS NOT NULL
+  OR EXISTS (SELECT 1 FROM invite_repos ir WHERE ir.invite_id = i.id AND ir.repo_id = r.id AND ir.deleted_at IS NULL))`;
 
 export async function createInvite(
   db: D1Database,
-  inv: { label: string; codeHash: string; accessMs: number | null; redeemByAt: number; repoIds: string[] },
+  inv: { label: string; codeHash: string; accessMs: number | null; redeemByAt: number; repoIds: string[]; allRepos?: boolean },
   now: number,
 ) {
   const id = uuidv7(now);
   await db.batch([
     db
-      .prepare("INSERT INTO invites (id, label, code_hash, access_ms, redeem_by_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-      .bind(id, inv.label, inv.codeHash, inv.accessMs, inv.redeemByAt, now, now),
-    ...inv.repoIds.map((repoId) =>
+      .prepare("INSERT INTO invites (id, label, code_hash, access_ms, redeem_by_at, created_at, updated_at, all_repos_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind(id, inv.label, inv.codeHash, inv.accessMs, inv.redeemByAt, now, now, inv.allRepos ? now : null),
+    ...(inv.allRepos ? [] : inv.repoIds).map((repoId) =>
       db.prepare("INSERT INTO invite_repos (invite_id, repo_id, created_at) VALUES (?, ?, ?)").bind(id, repoId, now),
     ),
   ]);
@@ -61,8 +65,8 @@ export async function redeemInvite(db: D1Database, id: string, clonePasswordHash
 export async function reposForInvite(db: D1Database, inviteId: string) {
   const { results } = await db
     .prepare(
-      `SELECT r.* FROM invite_repos ir JOIN repos r ON r.id = ir.repo_id
-       WHERE ir.invite_id = ? AND ir.deleted_at IS NULL AND r.deleted_at IS NULL AND r.provisioned_at IS NOT NULL
+      `SELECT r.* FROM repos r JOIN invites i ON i.id = ?
+       WHERE r.deleted_at IS NULL AND r.provisioned_at IS NOT NULL AND ${COVERS}
        ORDER BY r.name`,
     )
     .bind(inviteId)
@@ -74,7 +78,7 @@ export async function coveredRepoIds(db: D1Database, inviteIds: string[], now: n
   if (inviteIds.length === 0) return new Set<string>();
   const marks = inviteIds.map(() => "?").join(",");
   const { results } = await db
-    .prepare(`SELECT DISTINCT ir.repo_id FROM invite_repos ir JOIN invites i ON i.id = ir.invite_id WHERE ir.invite_id IN (${marks}) AND ${VALID}`)
+    .prepare(`SELECT DISTINCT r.id AS repo_id FROM repos r JOIN invites i ON i.id IN (${marks}) WHERE ${VALID} AND ${COVERS}`)
     .bind(...inviteIds, now)
     .all<{ repo_id: string }>();
   return new Set(results.map((r) => r.repo_id));
@@ -82,8 +86,8 @@ export async function coveredRepoIds(db: D1Database, inviteIds: string[], now: n
 
 export async function inviteCoversRepoByPassword(db: D1Database, passwordHash: string, repoId: string, now: number) {
   const row = await db
-    .prepare(`SELECT 1 AS ok FROM invite_repos ir JOIN invites i ON i.id = ir.invite_id WHERE i.clone_password_hash = ? AND ir.repo_id = ? AND ${VALID}`)
-    .bind(passwordHash, repoId, now)
+    .prepare(`SELECT 1 AS ok FROM invites i JOIN repos r ON r.id = ? WHERE i.clone_password_hash = ? AND ${VALID} AND ${COVERS}`)
+    .bind(repoId, passwordHash, now)
     .first();
   return row !== null;
 }

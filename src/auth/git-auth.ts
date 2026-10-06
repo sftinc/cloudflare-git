@@ -32,7 +32,7 @@ export async function decideGitAccess(
   if (!password) return { kind: "unauthorized" };
   if (!repo) return { kind: "notfound" };
   const hash = await sha256Hex(password);
-  const tokenId = await findValidPushTokenId(db, hash, repo.id);
+  const tokenId = await findValidPushTokenId(db, hash, repo.id, now);
   if (tokenId) return { kind: "allow", pushTokenId: tokenId };
   if (op === "fetch" && (await inviteCoversRepoByPassword(db, hash, repo.id, now))) return { kind: "allow" };
   return repo.public_at !== null ? { kind: "unauthorized" } : { kind: "notfound" };

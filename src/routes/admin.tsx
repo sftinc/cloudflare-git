@@ -154,14 +154,15 @@ adminRoutes.post("/invites", async (c) => {
   const b = await c.req.parseBody({ all: true });
   const label = str(b.label);
   const repoIds = list(b.repos);
+  const allRepos = str(b.all) === "1";
   const redeem = REDEEM_WINDOWS[str(b.redeem)];
   const access = str(b.access);
-  if (!label || repoIds.length === 0 || redeem === undefined || !(access in ACCESS_LENGTHS)) {
-    return invitesPage(c, { error: "Give the invite a name and pick at least one repo." }, 422);
+  if (!label || (!allRepos && repoIds.length === 0) || redeem === undefined || !(access in ACCESS_LENGTHS)) {
+    return invitesPage(c, { error: "Give the invite a name and pick at least one repo, or All repositories." }, 422);
   }
   const code = randomSecret();
   const now = Date.now();
-  await createInvite(c.env.DB, { label, codeHash: await sha256Hex(code), accessMs: ACCESS_LENGTHS[access], redeemByAt: now + redeem, repoIds }, now);
+  await createInvite(c.env.DB, { label, codeHash: await sha256Hex(code), accessMs: ACCESS_LENGTHS[access], redeemByAt: now + redeem, repoIds, allRepos }, now);
   return invitesPage(c, { link: `${siteOrigin(c)}/invite/${code}` });
 });
 
@@ -176,7 +177,7 @@ adminRoutes.post("/invites/:id/delete", async (c) => {
 });
 
 async function tokensPage(c: Context<AppEnv>, extra: { created?: string; error?: string } = {}, status = 200) {
-  return admin(c, "Push tokens · admin", <AdminTokens tokens={await listPushTokens(c.env.DB)} repos={await listLiveRepos(c.env.DB)} origin={siteOrigin(c)} {...extra} />, status);
+  return admin(c, "Push tokens · admin", <AdminTokens tokens={await listPushTokens(c.env.DB)} repos={await listLiveRepos(c.env.DB)} now={Date.now()} origin={siteOrigin(c)} {...extra} />, status);
 }
 
 adminRoutes.get("/tokens", (c) => tokensPage(c));
@@ -185,8 +186,10 @@ adminRoutes.post("/tokens", async (c) => {
   const b = await c.req.parseBody({ all: true });
   const name = str(b.name);
   if (!name) return tokensPage(c, { error: "Give the token a name." }, 422);
+  const now = Date.now();
+  const ms = ACCESS_LENGTHS[str(b.expires)] ?? null;
   const token = randomSecret();
-  await createPushToken(c.env.DB, { name, tokenHash: await sha256Hex(token), repoIds: list(b.repos) }, Date.now());
+  await createPushToken(c.env.DB, { name, tokenHash: await sha256Hex(token), repoIds: list(b.repos), expiresAt: ms === null ? null : now + ms }, now);
   return tokensPage(c, { created: token });
 });
 

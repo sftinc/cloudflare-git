@@ -172,7 +172,7 @@ table.list th { font-size: 12px; text-transform: uppercase; letter-spacing: .04e
 .table-scroll { overflow-x: auto; }
 div.actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .actions form { margin: 0; display: inline-block; }
-td.actions { white-space: nowrap; }
+table.list td.actions { white-space: nowrap; text-align: right; }
 td.actions form + form { margin-left: 8px; }
 form.stack { display: grid; gap: 14px; padding: 16px; max-width: 560px; }
 .card > form.stack { margin: 0; }
@@ -185,6 +185,8 @@ input[type=text], input[type=url], select { font: inherit; padding: 8px 10px; bo
 select { appearance: none; padding-right: 32px; cursor: pointer; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 17px) 52%, calc(100% - 12px) 52%; background-size: 5px 5px; background-repeat: no-repeat; }
 fieldset { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
 fieldset label { display: flex !important; align-items: center; gap: 8px; font-weight: 400 !important; }
+/* "All repositories" checked: the individual repos no longer matter. */
+fieldset:has(input[name=all]:checked) label:has(input[name=repos]) { opacity: .45; pointer-events: none; }
 .error { background: var(--error-bg); color: var(--error-text); border: 1px solid var(--error-border); border-radius: 8px; padding: 10px 14px; margin: 16px 0; }
 .secret { background: var(--notice); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin: 16px 0; }
 .secret > code, .secret code.clone-url { display: block; overflow-x: auto; white-space: nowrap; padding: 8px 0; }

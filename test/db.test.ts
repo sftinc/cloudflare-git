@@ -47,6 +47,18 @@ describe("invites", () => {
     expect(await invites.inviteCoversRepoByPassword(db, "p1", r.id, T + 9 * 24 * HOUR)).toBe(false);
     expect([...(await invites.coveredRepoIds(db, [id], T + 2 * HOUR))]).toEqual([r.id]);
   });
+  it("an all-repos invite covers every repo, including ones created later", async () => {
+    const before = await liveRepo("all-before");
+    const id = await invites.createInvite(db, { label: "Team", codeHash: "c-all", accessMs: null, redeemByAt: T + HOUR, repoIds: [], allRepos: true }, T);
+    expect(await invites.inviteCoversRepoByPassword(db, "p-all", before.id, T)).toBe(false); // not redeemed yet
+    await invites.redeemInvite(db, id, "p-all", T);
+    const after = await liveRepo("all-after");
+    expect(await invites.inviteCoversRepoByPassword(db, "p-all", before.id, T)).toBe(true);
+    expect(await invites.inviteCoversRepoByPassword(db, "p-all", after.id, T)).toBe(true);
+    const covered = await invites.coveredRepoIds(db, [id], T);
+    expect(covered.has(before.id) && covered.has(after.id)).toBe(true);
+    expect((await invites.reposForInvite(db, id)).map((r) => r.name)).toContain("all-after");
+  });
   it("cannot be redeemed after redeem_by_at", async () => {
     const id = await invites.createInvite(db, { label: "Late", codeHash: "c2", accessMs: null, redeemByAt: T + HOUR, repoIds: [] }, T);
     expect(await invites.redeemInvite(db, id, "p3", T + 2 * HOUR)).toBe(false);
@@ -79,18 +91,24 @@ describe("push tokens", () => {
     const a = await liveRepo("ta"), b = await liveRepo("tb");
     const all = await tokens.createPushToken(db, { name: "laptop", tokenHash: "h-all", repoIds: [] }, T);
     await tokens.createPushToken(db, { name: "ci", tokenHash: "h-a", repoIds: [a.id] }, T);
-    expect(await tokens.findValidPushTokenId(db, "h-all", b.id)).toBe(all);
-    expect(await tokens.findValidPushTokenId(db, "h-a", a.id)).not.toBeNull();
-    expect(await tokens.findValidPushTokenId(db, "h-a", b.id)).toBeNull();
+    expect(await tokens.findValidPushTokenId(db, "h-all", b.id, T)).toBe(all);
+    expect(await tokens.findValidPushTokenId(db, "h-a", a.id, T)).not.toBeNull();
+    expect(await tokens.findValidPushTokenId(db, "h-a", b.id, T)).toBeNull();
     await tokens.revokePushToken(db, all, T);
-    expect(await tokens.findValidPushTokenId(db, "h-all", b.id)).toBeNull();
+    expect(await tokens.findValidPushTokenId(db, "h-all", b.id, T)).toBeNull();
   });
   it("deleted tokens are hidden and invalid", async () => {
     const r = await liveRepo("tc");
     const id = await tokens.createPushToken(db, { name: "old", tokenHash: "h-old", repoIds: [] }, T);
     await tokens.deletePushToken(db, id, T);
-    expect(await tokens.findValidPushTokenId(db, "h-old", r.id)).toBeNull();
+    expect(await tokens.findValidPushTokenId(db, "h-old", r.id, T)).toBeNull();
     expect((await tokens.listPushTokens(db)).map((t) => t.id)).not.toContain(id);
+  });
+  it("tokens stop working when they expire", async () => {
+    const r = await liveRepo("td");
+    await tokens.createPushToken(db, { name: "short", tokenHash: "h-exp", repoIds: [], expiresAt: T + 1000 }, T);
+    expect(await tokens.findValidPushTokenId(db, "h-exp", r.id, T + 999)).not.toBeNull();
+    expect(await tokens.findValidPushTokenId(db, "h-exp", r.id, T + 1000)).toBeNull();
   });
 });
 

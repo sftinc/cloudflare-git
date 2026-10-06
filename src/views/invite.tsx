@@ -9,12 +9,18 @@ export function accessLabel(ms: number | null): string {
   return `Access lasts ${days === 365 ? "1 year" : `${days} days`} from now.`;
 }
 
-export function InviteConfirm(props: { label: string; repos: RepoRow[]; accessMs: number | null; action: string }) {
+export function InviteConfirm(props: { label: string; repos: RepoRow[]; allRepos: boolean; accessMs: number | null; action: string }) {
   return (
     <section class="card invite">
       <h2>You're invited, {props.label}</h2>
-      <p>This invite gives you read access to:</p>
-      <ul>{props.repos.map((r) => <li><strong>{r.name}</strong></li>)}</ul>
+      {props.allRepos ? (
+        <p>This invite gives you read access to every repository here, including new ones.</p>
+      ) : (
+        <>
+          <p>This invite gives you read access to:</p>
+          <ul>{props.repos.map((r) => <li><strong>{r.name}</strong></li>)}</ul>
+        </>
+      )}
       <p class="muted">{accessLabel(props.accessMs)} The link works once.</p>
       <form method="post" action={props.action}>
         <button type="submit" class="primary">Accept invite</button>

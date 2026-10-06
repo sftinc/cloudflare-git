@@ -22,6 +22,7 @@ CREATE TABLE invites (
   revoked_at INTEGER,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
+  all_repos_at INTEGER,
   deleted_at INTEGER
 );
 
@@ -42,6 +43,7 @@ CREATE TABLE push_tokens (
   revoked_at INTEGER,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
+  expires_at INTEGER,
   deleted_at INTEGER
 );
 

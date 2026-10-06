@@ -14,7 +14,7 @@ inviteRoutes.get("/:code", async (c) => {
   const inv = await findInviteByCodeHash(c.env.DB, await sha256Hex(c.req.param("code")));
   if (!inv || !isRedeemable(inv, Date.now())) return page(c, "Invite not valid", <InviteInvalid />, 404);
   const repos = await reposForInvite(c.env.DB, inv.id);
-  return page(c, "You're invited", <InviteConfirm label={inv.label} repos={repos} accessMs={inv.access_ms} action={`/invite/${encodeURIComponent(c.req.param("code"))}`} />);
+  return page(c, "You're invited", <InviteConfirm label={inv.label} repos={repos} allRepos={inv.all_repos_at !== null} accessMs={inv.access_ms} action={`/invite/${encodeURIComponent(c.req.param("code"))}`} />);
 });
 
 // POST redeems, so link previews in chat apps can't use up the invite.

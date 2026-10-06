@@ -154,10 +154,10 @@ describe("invites and tokens", () => {
     const tok = secretOf(r.html)!;
     expect(r.html).toContain(`echo url=https://x:${tok}@git.test|git credential approve`);
     const id = (await call("POST", "/admin/repos", { name: "tk" })).location!.split("/").pop()!;
-    expect(await tokens.findValidPushTokenId(env.DB, await sha256Hex(tok), id)).not.toBeNull();
+    expect(await tokens.findValidPushTokenId(env.DB, await sha256Hex(tok), id, Date.now())).not.toBeNull();
     const listed = (await tokens.listPushTokens(env.DB))[0];
     await call("POST", `/admin/tokens/${listed.id}/revoke`, {});
-    expect(await tokens.findValidPushTokenId(env.DB, await sha256Hex(tok), id)).toBeNull();
+    expect(await tokens.findValidPushTokenId(env.DB, await sha256Hex(tok), id, Date.now())).toBeNull();
   });
 });
 
