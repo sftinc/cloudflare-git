@@ -101,7 +101,7 @@ export function AdminNewRepo(props: { kind: "create" | "import"; error?: string;
   const name = <label>Name <span class="hint">lowercase letters, digits, hyphens</span><input {...NAME_INPUT} value={v.name ?? ""} /></label>;
   const description = <label>Description <span class="hint">optional</span><input type="text" name="description" value={v.description ?? ""} /></label>;
   return (
-    <div class="new-repo">
+    <>
       <h1 class="page-title">New repository</h1>
       <nav class="source-pick" aria-label="Start from">
         <a href="/admin/new" aria-current={create ? "page" : undefined}>
@@ -139,7 +139,7 @@ export function AdminNewRepo(props: { kind: "create" | "import"; error?: string;
           </form>
         )}
       </section>
-    </div>
+    </>
   );
 }
 

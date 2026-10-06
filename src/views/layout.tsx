@@ -77,7 +77,7 @@ export function Layout(props: { title: string; env: Env; admin?: boolean; owner?
             </div>
           </div>
         </header>
-        <main class="wrap">{props.children}</main>
+        <main class={props.admin ? "wrap admin" : "wrap"}>{props.children}</main>
         <footer class="site">
           <div class="wrap">
             <span>{env.COMPANY_NAME && `© ${new Date().getFullYear()} ${env.COMPANY_NAME}`}</span>

@@ -34,6 +34,9 @@ a:hover { text-decoration: underline; }
 code, pre { font-family: var(--mono); font-size: 13px; }
 .wrap { max-width: 1040px; margin: 0 auto; padding: 0 16px; }
 main.wrap { flex: 1; width: 100%; padding-top: 32px; padding-bottom: 64px; }
+/* Admin: one 760px column, left-aligned under the logo; forms fill their cards. */
+main.admin > * { max-width: 760px; }
+main.admin form.stack { max-width: none; }
 .icon { width: 16px; height: 16px; flex: none; vertical-align: -3px; }
 .muted { color: var(--muted); }
 
@@ -85,8 +88,6 @@ footer.site .wrap { display: flex; justify-content: space-between; gap: 12px; fl
 .card.empty > h2, .card.empty > p { margin: 0; }
 .card.empty > p { max-width: 360px; font-size: 14px; }
 .card.empty .btn { margin-top: 8px; }
-.new-repo { max-width: 640px; }
-.new-repo form.stack { max-width: none; }
 .source-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 4px 0 16px; }
 .source-pick a { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
 .source-pick a:hover { text-decoration: none; background: var(--code-bg); }
