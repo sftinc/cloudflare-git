@@ -1,6 +1,9 @@
 type Content = string | Uint8Array;
 type Seed = {
   defaultBranch?: string;
+  tags?: string[];
+  lastPushAt?: string;
+  source?: string;
   branches: Record<string, { files: Record<string, Content>; commits?: { message: string; author?: string; authoredAt?: number }[] }>;
 };
 type RepoData = {
@@ -12,6 +15,9 @@ type RepoData = {
   blobs: Map<string, Uint8Array>;
   commits: Map<string, ArtifactsCommitMetadata[]>; // branch -> newest first
   files: Map<string, Map<string, Uint8Array>>; // branch -> path -> bytes
+  tags: string[];
+  lastPushAt: string | null;
+  source: string | null;
 };
 
 const enc = new TextEncoder();
@@ -73,6 +79,7 @@ export class FakeArtifacts {
       name, defaultBranch, status,
       remote: `https://fake.artifacts.test/git/ns/${name}.git`,
       trees: new Map(), blobs: new Map(), commits: new Map(), files: new Map(),
+      tags: [], lastPushAt: null, source: null,
     };
   }
 
@@ -121,6 +128,7 @@ export class FakeArtifacts {
   /** Test helper: create a ready repo with content. */
   seed(name: string, seed: Seed) {
     const r = this.empty(name, seed.defaultBranch ?? "main", "ready");
+    Object.assign(r, { tags: seed.tags ?? [], lastPushAt: seed.lastPushAt ?? null, source: seed.source ?? null });
     for (const [branch, b] of Object.entries(seed.branches)) {
       const files = new Map<string, Uint8Array>();
       for (const [p, c] of Object.entries(b.files)) files.set(p, typeof c === "string" ? enc.encode(c) : c);
@@ -164,7 +172,7 @@ class FakeRepo {
   constructor(private r: RepoData, private parent: FakeArtifacts) {}
   [Symbol.dispose]() {}
   async info(): Promise<ArtifactsRepoInfo> {
-    return { id: fakeHash(`id:${this.r.name}`), name: this.r.name, description: null, defaultBranch: this.r.defaultBranch, createdAt: "", updatedAt: "", lastPushAt: null, source: null, readOnly: false, remote: this.r.remote };
+    return { id: fakeHash(`id:${this.r.name}`), name: this.r.name, description: null, defaultBranch: this.r.defaultBranch, createdAt: "", updatedAt: "", lastPushAt: this.r.lastPushAt, source: this.r.source, readOnly: false, remote: this.r.remote };
   }
   async createToken(scope: "read" | "write" = "write", ttl = 86400): Promise<ArtifactsCreateTokenResult> {
     this.parent.tokens.push({ name: this.r.name, scope });

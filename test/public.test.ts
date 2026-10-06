@@ -24,6 +24,9 @@ beforeEach(async () => {
   fake = new FakeArtifacts();
   fake.seed("site", {
     defaultBranch: "main",
+    tags: ["v1.0.0"],
+    lastPushAt: new Date(Date.now() - 3 * 86_400_000).toISOString(),
+    source: "github:acme/site",
     branches: {
       main: {
         files: {
@@ -118,6 +121,27 @@ describe("repo pages", () => {
     expect(body).toContain("https://git.test/r/site.git");
     expect(body).toContain('href="/r/site/tree/feature/login"');
     expect(body).toContain('href="/r/site/tree/main/src"');
+  });
+  it("repo home shows the branch picker and counts beside the title, and an About card", async () => {
+    const { body } = await html("/r/site");
+    expect(body).toContain('<a href="/" class="crumb">Repos</a>');
+    expect(body).toContain("<strong>2</strong> branches");
+    expect(body).toContain("<strong>1</strong> tag<");
+    const about = body.split('<aside class="about">')[1].split("</aside>")[0];
+    expect(about).toContain("site description");
+    expect(about).toContain('href="/r/site/blob/main/README.md"');
+    expect(about).toContain("Default branch <strong>main</strong>");
+    expect(about).toContain("Pushed <strong>3 days ago</strong>");
+    expect(about).toContain("Imported from <strong>github:acme/site</strong>");
+    expect(body).toContain('href="/r/site/commits/main"');
+  });
+  it("leaves out About rows it has nothing for, and About on subfolders", async () => {
+    const secret = await html("/r/secret", await ownerEnv({ ARTIFACTS: fake }), { "cf-access-jwt-assertion": await ownerToken() });
+    const about = secret.body.split('<aside class="about">')[1].split("</aside>")[0];
+    expect(about).not.toContain("Pushed");
+    expect(about).not.toContain("Imported from");
+    expect(secret.body).toContain("<strong>1</strong> branch<");
+    expect((await html("/r/site/tree/main/docs")).body).not.toContain('<aside class="about">');
   });
   it("private repos are 404 for strangers", async () => {
     expect((await html("/r/secret")).status).toBe(404);

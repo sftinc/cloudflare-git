@@ -15,15 +15,15 @@ export const MAX_VIEW_BYTES = 1_048_576;
 const PER_PAGE = 30;
 const NAME = "[a-z0-9][a-z0-9-]*";
 
-type Loaded = { repo: RepoRow; branches: string[]; head: string | null; cloneUrl: string };
+type Loaded = { repo: RepoRow; branches: string[]; head: string | null; tags: string[]; cloneUrl: string };
 
 export const publicRoutes = new Hono<AppEnv>();
 
 async function load(c: Context<AppEnv>): Promise<Loaded | null> {
   const repo = await findLiveRepo(c.env.DB, c.req.param("repo")!);
   if (!repo || !(await canView(c.env.DB, await getViewer(c), repo, Date.now()))) return null;
-  const { branches, head } = await listBranches(c.env.ARTIFACTS, repo.name);
-  return { repo, branches, head, cloneUrl: cloneUrl(siteOrigin(c), repo.name) };
+  const { branches, head, tags } = await listBranches(c.env.ARTIFACTS, repo.name);
+  return { repo, branches, head, tags, cloneUrl: cloneUrl(siteOrigin(c), repo.name) };
 }
 
 /** Decoded path after `/r/<repo>/<kind>/`, or null when malformed. */
@@ -51,6 +51,8 @@ async function renderTree(c: Context<AppEnv>, l: Loaded, branch: string, path: s
   if (!commit) return c.notFound();
   const entries = await readDir(h, commit.treeHash, path);
   if (!entries) return c.notFound();
+  // The repo's own page (not a subfolder) gets the About card.
+  const info = path ? null : await h.info();
   let readme: string | null = null;
   const readmeEntry = entries.find((e) => e.type === "blob" && /^readme\.md$/i.test(e.name));
   if (readmeEntry) {
@@ -58,7 +60,8 @@ async function renderTree(c: Context<AppEnv>, l: Loaded, branch: string, path: s
     if (blob) readme = renderMarkdown(await blob.slice(0, MAX_VIEW_BYTES).text(), { repo: l.repo.name, branch, dir: path });
   }
   const title = path ? `${path} · ${l.repo.name}` : l.repo.name;
-  return page(c, title, <TreeView repo={l.repo} branch={branch} branches={l.branches} path={path} entries={entries} commit={commit} readme={readme} cloneUrl={l.cloneUrl} />);
+  return page(c, title, <TreeView repo={l.repo} branch={branch} branches={l.branches} tags={l.tags} head={l.head} path={path} entries={entries} commit={commit}
+      readme={readme} readmeName={readmeEntry?.name ?? null} info={info} cloneUrl={l.cloneUrl} now={Date.now()} />);
 }
 
 publicRoutes.get("/", async (c) => {

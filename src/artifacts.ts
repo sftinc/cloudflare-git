@@ -57,7 +57,7 @@ export async function getRepoAccess(art: Artifacts, name: string, scope: "read" 
   return { remote: r, token: t.plaintext };
 }
 
-/** Branch names from the git ref advertisement (Artifacts has no branch-list API); head is null unless it exists. */
+/** Branch and tag names from the git ref advertisement (Artifacts has no branch-list API); head is null unless it exists. */
 export async function listBranches(art: Artifacts, name: string) {
   const { remote, token } = await getRepoAccess(art, name, "read");
   const res = await fetch(`${remote}/info/refs?service=git-upload-pack`, {
@@ -72,5 +72,6 @@ export async function listBranches(art: Artifacts, name: string) {
   // HEAD's symref can name a branch that was never pushed (e.g. default "main", only "master" pushed).
   const head = advert.head !== null && names.includes(advert.head) ? advert.head : null;
   const branches = names.sort((a, b) => (a === head ? -1 : b === head ? 1 : a.localeCompare(b)));
-  return { branches, head };
+  const tags = [...advert.refs.keys()].filter((r) => r.startsWith("refs/tags/") && !r.endsWith("^{}")).map((r) => r.slice("refs/tags/".length));
+  return { branches, head, tags };
 }

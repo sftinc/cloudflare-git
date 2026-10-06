@@ -1,7 +1,8 @@
+import type { Child } from "hono/jsx";
 import { raw } from "hono/html";
 import type { RepoRow } from "../db/repos";
 import { blobHref, commitsHref, repoHref, treeHref } from "../render/paths";
-import { Book, Branch, Chevron, Clock, Copy, File, Folder } from "./icons";
+import { Book, Branch, Chevron, Clock, Copy, Download, File, Folder, Upload } from "./icons";
 
 export const NO_REPOS_OWNER = "Create an empty repository to push to, or import one from another host.";
 
@@ -9,6 +10,15 @@ export const fmtDate = (sec: number) => new Date(sec * 1000).toISOString().slice
 export const fmtSize = (n: number) => (n < 1024 ? `${n} B` : n < 1_048_576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1_048_576).toFixed(1)} MB`);
 const fmtDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 const firstLine = (s: string) => s.split("\n", 1)[0];
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+/** "3 days ago" style, from epoch ms. */
+export function fmtAgo(ms: number, now: number) {
+  const s = Math.max(0, (now - ms) / 1000);
+  if (s < 60) return "just now";
+  const [n, unit] = s < 3600 ? [s / 60, "minute"] : s < 86_400 ? [s / 3600, "hour"] : s < 2_592_000 ? [s / 86_400, "day"] : s < 31_536_000 ? [s / 2_592_000, "month"] : [s / 31_536_000, "year"];
+  return `${plural(Math.floor(n), unit)} ago`;
+}
 
 export function Home(props: { repos: RepoRow[]; owner: boolean }) {
   return (
@@ -63,15 +73,15 @@ export function CloneBox(props: { url: string }) {
   );
 }
 
-function RepoHeader(props: { repo: RepoRow; cloneUrl: string }) {
+function RepoHeader(props: { repo: RepoRow; children?: Child }) {
+  const { repo } = props;
   return (
-    <div class="repo-head">
-      <h1 class="page-title">
-        <a href={repoHref(props.repo.name)}>{props.repo.name}</a>
-        {props.repo.public_at === null ? <span class="badge">Private</span> : <span class="badge ok">Public</span>}
+    <div class="repo-title-row">
+      <h1 class="page-title repo-title">
+        <Book /><a href="/" class="crumb">Repos</a><span class="sep">/</span><a href={repoHref(repo.name)} class="repo-title-name">{repo.name}</a>
+        {repo.public_at === null ? <span class="badge">Private</span> : <span class="badge ok">Public</span>}
       </h1>
-      {props.repo.description && <p class="muted">{props.repo.description}</p>}
-      <CloneBox url={props.cloneUrl} />
+      {props.children && <div class="repo-toolbar">{props.children}</div>}
     </div>
   );
 }
@@ -111,7 +121,8 @@ function Crumbs(props: { repo: string; branch: string; path: string }) {
 export function EmptyRepo(props: { repo: RepoRow; cloneUrl: string }) {
   return (
     <>
-      <RepoHeader repo={props.repo} cloneUrl={props.cloneUrl} />
+      <RepoHeader repo={props.repo} />
+      <CloneBox url={props.cloneUrl} />
       <section class="card">
         <h2>This repo is empty</h2>
         <p class="muted">Push an existing repository from the command line:</p>
@@ -121,24 +132,43 @@ export function EmptyRepo(props: { repo: RepoRow; cloneUrl: string }) {
   );
 }
 
-export function TreeView(props: {
-  repo: RepoRow; branch: string; branches: string[]; path: string; entries: ArtifactsTreeEntry[];
-  commit: ArtifactsCommitMetadata; readme: string | null; cloneUrl: string;
-}) {
-  const { repo, branch, path } = props;
-  const child = (name: string) => (path ? `${path}/${name}` : name);
+function About(props: { repo: RepoRow; branch: string; head: string | null; readmeName: string | null; info: ArtifactsRepoInfo; cloneUrl: string; now: number }) {
+  const { repo, info } = props;
   return (
-    <>
-      <RepoHeader repo={repo} cloneUrl={props.cloneUrl} />
-      <div class="toolbar">
-        <BranchSwitcher branches={props.branches} current={branch} href={(b) => treeHref(repo.name, b)} />
-        <Crumbs repo={repo.name} branch={branch} path={path} />
-        <a class="toolbar-link" href={commitsHref(repo.name, branch)}><Clock /> Commits</a>
+    <aside class="about">
+      <h2>About</h2>
+      {repo.description && <p class="about-desc">{repo.description}</p>}
+      <p class="about-label">Clone</p>
+      <div class="clone">
+        <code>{props.cloneUrl}</code>
+        <button type="button" class="btn" data-copy={props.cloneUrl} aria-label="Copy clone URL" title="Copy"><Copy /></button>
       </div>
+      <ul class="facts">
+        {props.readmeName && <li><Book /><a href={blobHref(repo.name, props.branch, props.readmeName)}>Readme</a></li>}
+        {props.head && <li><Branch /><span>Default branch <strong>{props.head}</strong></span></li>}
+        {info.lastPushAt && <li><Upload /><span>Pushed <strong>{fmtAgo(Date.parse(info.lastPushAt), props.now)}</strong></span></li>}
+        <li><Clock /><span>Created <strong>{fmtDay(repo.created_at)}</strong></span></li>
+        {info.source && <li><Download /><span>Imported from <strong>{info.source}</strong></span></li>}
+      </ul>
+    </aside>
+  );
+}
+
+export function TreeView(props: {
+  repo: RepoRow; branch: string; branches: string[]; tags: string[]; head: string | null; path: string; entries: ArtifactsTreeEntry[];
+  commit: ArtifactsCommitMetadata; readme: string | null; readmeName: string | null; info: ArtifactsRepoInfo | null; cloneUrl: string; now: number;
+}) {
+  const { repo, branch, path, commit } = props;
+  const child = (name: string) => (path ? `${path}/${name}` : name);
+  const files = (
+    <div class="repo-main">
+      {path && <Crumbs repo={repo.name} branch={branch} path={path} />}
       <div class="card files">
         <div class="last-commit">
-          <span class="commit-msg">{firstLine(props.commit.message)}</span>
-          <span class="muted">{props.commit.author.name} · {fmtDate(props.commit.committedAt)} · <code>{props.commit.hash.slice(0, 7)}</code></span>
+          <span class="commit-author">{commit.author.name}</span>
+          <span class="commit-msg">{firstLine(commit.message)}</span>
+          <span class="commit-meta"><code>{commit.hash.slice(0, 7)}</code> · {fmtAgo(commit.committedAt * 1000, props.now)}</span>
+          <a class="commit-history" href={commitsHref(repo.name, branch)}><Clock /> Commits</a>
         </div>
         <ul class="entries">
           {path && (
@@ -161,10 +191,25 @@ export function TreeView(props: {
       </div>
       {props.readme !== null && (
         <section class="card">
-          <div class="file-head readme-head"><span><Book /> README</span></div>
+          <div class="readme-head"><span><Book /> README</span></div>
           <article class="markdown">{raw(props.readme)}</article>
         </section>
       )}
+    </div>
+  );
+  return (
+    <>
+      <RepoHeader repo={repo}>
+        <BranchSwitcher branches={props.branches} current={branch} href={(b) => treeHref(repo.name, b)} />
+        <span class="count"><strong>{props.branches.length}</strong> {props.branches.length === 1 ? "branch" : "branches"}</span>
+        <span class="count"><strong>{props.tags.length}</strong> {props.tags.length === 1 ? "tag" : "tags"}</span>
+      </RepoHeader>
+      {props.info ? (
+        <div class="repo-layout">
+          {files}
+          <About repo={repo} branch={branch} head={props.head} readmeName={props.readmeName} info={props.info} cloneUrl={props.cloneUrl} now={props.now} />
+        </div>
+      ) : files}
     </>
   );
 }
@@ -177,11 +222,10 @@ export function BlobView(props: {
   const base = blobHref(repo.name, branch, path);
   return (
     <>
-      <RepoHeader repo={repo} cloneUrl={props.cloneUrl} />
-      <div class="toolbar">
+      <RepoHeader repo={repo}>
         <BranchSwitcher branches={props.branches} current={branch} href={(b) => treeHref(repo.name, b)} />
-        <Crumbs repo={repo.name} branch={branch} path={path} />
-      </div>
+      </RepoHeader>
+      <Crumbs repo={repo.name} branch={branch} path={path} />
       <div class="card file">
         <div class="file-head">
           <span class="muted">{fmtSize(props.size)}</span>
@@ -210,11 +254,10 @@ export function Commits(props: {
   const href = (p: number) => `${commitsHref(repo.name, branch)}?page=${p}`;
   return (
     <>
-      <RepoHeader repo={repo} cloneUrl={props.cloneUrl} />
-      <div class="toolbar">
+      <RepoHeader repo={repo}>
         <BranchSwitcher branches={props.branches} current={branch} href={(b) => commitsHref(repo.name, b)} />
         <a class="toolbar-link" href={treeHref(repo.name, branch)}><Folder /> Files</a>
-      </div>
+      </RepoHeader>
       <ul class="card commits">
         {props.commits.map((c) => (
           <li>

@@ -25,17 +25,18 @@ describe("getRepoAccess", () => {
 });
 
 describe("listBranches", () => {
-  it("returns branches with HEAD first", async () => {
+  it("returns branches with HEAD first, and tags", async () => {
     const fake = new FakeArtifacts();
-    fake.seed("site", { defaultBranch: "main", branches: { "feature/x": { files: { a: "1" } }, main: { files: { a: "1" } } } });
+    fake.seed("site", { defaultBranch: "main", tags: ["v1", "v2"], branches: { "feature/x": { files: { a: "1" } }, main: { files: { a: "1" } } } });
     stubArtifactsGit(fake);
-    expect(await listBranches(asArt(fake), "site")).toEqual({ branches: ["main", "feature/x"], head: "main" });
+    // Annotated tags are advertised twice (tag and peeled "^{}"); each counts once.
+    expect(await listBranches(asArt(fake), "site")).toEqual({ branches: ["main", "feature/x"], head: "main", tags: ["v1", "v2"] });
   });
   it("reports no head when HEAD's symref names a branch that does not exist", async () => {
     const fake = new FakeArtifacts();
     fake.seed("site", { defaultBranch: "main", branches: { master: { files: { a: "1" } }, dev: { files: { a: "1" } } } });
     stubArtifactsGit(fake);
-    expect(await listBranches(asArt(fake), "site")).toEqual({ branches: ["dev", "master"], head: null });
+    expect(await listBranches(asArt(fake), "site")).toEqual({ branches: ["dev", "master"], head: null, tags: [] });
   });
   it("drops the cached token when the advertisement is 401/403", async () => {
     const fake = new FakeArtifacts();

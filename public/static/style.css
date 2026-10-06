@@ -102,8 +102,29 @@ footer.site .wrap { display: flex; justify-content: space-between; gap: 12px; fl
 .empty-icon { display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: 12px; background: var(--badge-bg); color: var(--muted); }
 .empty-icon .icon { width: 24px; height: 24px; }
 
-.repo-head { margin-bottom: 8px; }
-.repo-head .page-title { font-family: var(--mono); }
+/* Repo pages: "Repos / name" title with the branch picker on the right; files beside an About card. */
+.repo-title-row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 24px; margin-bottom: 20px; }
+.repo-title { margin: 0; font-size: 24px; }
+.repo-title .icon { width: 20px; height: 20px; color: var(--muted); }
+.repo-title .crumb { color: var(--accent); font-weight: 400; }
+.repo-title .sep { color: var(--muted); font-weight: 400; }
+.page-title .repo-title-name { font-family: var(--mono); }
+.repo-toolbar { margin-left: auto; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; }
+.count { color: var(--muted); font-size: 14px; white-space: nowrap; }
+.count strong { color: var(--text); }
+.repo-layout { display: grid; grid-template-columns: minmax(0, 1fr) 352px; gap: 24px; align-items: start; }
+.repo-main > :first-child { margin-top: 0; }
+.about { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+.about h2 { font-size: 16px; margin: 0 0 10px; }
+.about-desc { margin: 0 0 14px; }
+.about-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin: 0 0 6px; }
+.about .clone { margin: 0 0 16px; max-width: none; gap: 4px; padding: 3px 3px 3px 10px; }
+.about .clone code { font-size: 12px; scrollbar-width: none; }
+.about .clone .btn { padding: 5px 8px; }
+.facts { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; font-size: 14px; color: var(--muted); }
+.facts li { display: flex; align-items: center; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
+.facts a, .facts strong { color: var(--text); }
+.facts a:hover { color: var(--accent); text-decoration: none; }
 .clone { display: flex; align-items: center; gap: 8px; margin-top: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 6px 6px 12px; max-width: 640px; }
 .clone-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .clone code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; }
@@ -117,7 +138,7 @@ button.link { background: none; border: 0; color: var(--accent); padding: 0; fon
 
 .toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 20px; }
 .toolbar-link { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
-.crumbs { font-weight: 600; word-break: break-word; }
+.crumbs { display: block; margin-bottom: 12px; font-weight: 600; word-break: break-word; }
 .crumbs .sep { color: var(--muted); margin: 0 4px; }
 .menu { position: relative; }
 .menu summary { list-style: none; }
@@ -134,7 +155,11 @@ button.link { background: none; border: 0; color: var(--accent); padding: 0; fon
 .branches li a { display: block; padding: 6px 14px; color: var(--text); }
 .branches li a.current { font-weight: 700; color: var(--accent); }
 
-.last-commit { display: flex; gap: 12px; justify-content: space-between; flex-wrap: wrap; padding: 12px 16px; background: var(--code-bg); border-bottom: 1px solid var(--border); }
+.last-commit { display: flex; align-items: center; gap: 10px; padding: 12px 16px; font-size: 14px; background: var(--code-bg); border-bottom: 1px solid var(--border); }
+.commit-author { font-weight: 600; white-space: nowrap; }
+.last-commit .commit-msg { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-weight: 400; }
+.commit-meta { color: var(--muted); font-size: 13px; white-space: nowrap; }
+.commit-history { display: inline-flex; align-items: center; gap: 6px; color: var(--text); font-size: 13px; font-weight: 600; white-space: nowrap; }
 .commit-msg { font-weight: 500; overflow-wrap: anywhere; }
 .entries { list-style: none; margin: 0; padding: 0; }
 .entries li { border-top: 1px solid var(--border); }
@@ -152,7 +177,8 @@ pre.code { margin: 0; padding: 16px; overflow-x: auto; background: var(--code-bg
 .card pre.code { border-radius: 0; }
 section.card pre.code { margin: 0 16px 16px; border-radius: 8px; }
 
-.readme-head span { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.readme-head { display: flex; padding: 0 16px; border-bottom: 1px solid var(--border); }
+.readme-head span { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; padding: 12px 0 10px; margin-bottom: -1px; border-bottom: 2px solid var(--accent); }
 .markdown { padding: 8px 28px 24px; overflow-wrap: anywhere; }
 .markdown th, .markdown td { overflow-wrap: normal; }
 .markdown h1, .markdown h2 { border-bottom: 1px solid var(--border); padding-bottom: .3em; }
@@ -252,7 +278,13 @@ fieldset:has(input[name=all]:checked) label:has(input[name=repos]) { opacity: .4
   .box > .hook > form:last-child button { width: auto; }
   .add-hook .inline { display: grid; }
 }
-@media (max-width: 720px) { .toolbar-link { margin-left: 0; } .markdown { padding: 4px 16px 12px; } }
+@media (max-width: 720px) {
+  .toolbar-link { margin-left: 0; } .markdown { padding: 4px 16px 12px; }
+  .repo-toolbar { margin-left: 0; }
+  .repo-layout { grid-template-columns: minmax(0, 1fr); }
+  .about { order: -1; }
+  .commit-meta { display: none; }
+}
 
 /* highlight.js tokens */
 .hljs-keyword, .hljs-selector-tag, .hljs-built_in, .hljs-type { color: var(--hl-keyword); }
