@@ -26,7 +26,7 @@ async function setup() {
     await repos.markProvisioned(env.DB, r.id, 1);
     if (name === "pub") await repos.setPublic(env.DB, r.id, true, 1);
   }
-  await tokens.createPushToken(env.DB, { name: "laptop", tokenHash: await sha256Hex("tok"), repoIds: [] }, 1);
+  await tokens.createPushToken(env.DB, { name: "laptop", tokenHash: await sha256Hex("tok"), repoIds: [], allRepos: true }, 1);
   const priv = (await repos.findRepoByName(env.DB, "priv"))!;
   await hooks.createWebhook(env.DB, { repoId: priv.id, url: "https://hooks.test/build", branch: "main", secret: "k" }, 1);
 }

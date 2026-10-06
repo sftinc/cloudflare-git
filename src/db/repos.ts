@@ -5,9 +5,9 @@ export type RepoRow = {
   name: string;
   description: string | null;
   public_at: number | null;
-  provisioned_at: number | null;
   created_at: number;
   updated_at: number;
+  provisioned_at: number | null;
   deleted_at: number | null;
 };
 

@@ -87,9 +87,14 @@ describe("invites", () => {
 });
 
 describe("push tokens", () => {
-  it("unrestricted tokens work everywhere; restricted ones only on their repos", async () => {
+  it("a token with no repos and no All covers nothing", async () => {
+    const r = await liveRepo("te");
+    await tokens.createPushToken(db, { name: "empty", tokenHash: "h-none", repoIds: [] }, T);
+    expect(await tokens.findValidPushTokenId(db, "h-none", r.id, T)).toBeNull();
+  });
+  it("all-repos tokens work everywhere; restricted ones only on their repos", async () => {
     const a = await liveRepo("ta"), b = await liveRepo("tb");
-    const all = await tokens.createPushToken(db, { name: "laptop", tokenHash: "h-all", repoIds: [] }, T);
+    const all = await tokens.createPushToken(db, { name: "laptop", tokenHash: "h-all", repoIds: [], allRepos: true }, T);
     await tokens.createPushToken(db, { name: "ci", tokenHash: "h-a", repoIds: [a.id] }, T);
     expect(await tokens.findValidPushTokenId(db, "h-all", b.id, T)).toBe(all);
     expect(await tokens.findValidPushTokenId(db, "h-a", a.id, T)).not.toBeNull();
@@ -99,14 +104,14 @@ describe("push tokens", () => {
   });
   it("deleted tokens are hidden and invalid", async () => {
     const r = await liveRepo("tc");
-    const id = await tokens.createPushToken(db, { name: "old", tokenHash: "h-old", repoIds: [] }, T);
+    const id = await tokens.createPushToken(db, { name: "old", tokenHash: "h-old", repoIds: [], allRepos: true }, T);
     await tokens.deletePushToken(db, id, T);
     expect(await tokens.findValidPushTokenId(db, "h-old", r.id, T)).toBeNull();
     expect((await tokens.listPushTokens(db)).map((t) => t.id)).not.toContain(id);
   });
   it("tokens stop working when they expire", async () => {
     const r = await liveRepo("td");
-    await tokens.createPushToken(db, { name: "short", tokenHash: "h-exp", repoIds: [], expiresAt: T + 1000 }, T);
+    await tokens.createPushToken(db, { name: "short", tokenHash: "h-exp", repoIds: [], allRepos: true, expiresAt: T + 1000 }, T);
     expect(await tokens.findValidPushTokenId(db, "h-exp", r.id, T + 999)).not.toBeNull();
     expect(await tokens.findValidPushTokenId(db, "h-exp", r.id, T + 1000)).toBeNull();
   });

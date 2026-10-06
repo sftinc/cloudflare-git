@@ -91,7 +91,7 @@ describe("git credentials", () => {
 
   it("follows the access table", async () => {
     const pub = await live("g-pub", true), priv = await live("g-priv", false), other = await live("g-other", false);
-    await tokens.createPushToken(db, { name: "all", tokenHash: await sha256Hex("tok-all"), repoIds: [] }, T);
+    await tokens.createPushToken(db, { name: "all", tokenHash: await sha256Hex("tok-all"), repoIds: [], allRepos: true }, T);
     await tokens.createPushToken(db, { name: "other-only", tokenHash: await sha256Hex("tok-other"), repoIds: [other.id] }, T);
     const inv = await invites.createInvite(db, { label: "f", codeHash: "gc1", accessMs: null, redeemByAt: T + 1e6, repoIds: [priv.id] }, T);
     await invites.redeemInvite(db, inv, await sha256Hex("inv-pass"), T);

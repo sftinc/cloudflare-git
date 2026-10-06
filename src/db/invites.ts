@@ -8,12 +8,12 @@ export type InviteRow = {
   clone_password_hash: string | null;
   access_ms: number | null;
   redeem_by_at: number;
+  all_repos_at: number | null;
+  created_at: number;
+  updated_at: number;
   redeemed_at: number | null;
   access_expires_at: number | null;
   revoked_at: number | null;
-  created_at: number;
-  updated_at: number;
-  all_repos_at: number | null;
   deleted_at: number | null;
 };
 

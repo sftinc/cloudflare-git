@@ -281,7 +281,7 @@ export function AdminTokens(props: { tokens: (PushTokenRow & { repo_names: strin
               {props.tokens.map((t) => (
                 <tr>
                   <td>{t.name}</td>
-                  <td>{t.repo_names ?? <span class="muted">all</span>}</td>
+                  <td>{t.all_repos_at !== null ? "All repositories" : t.repo_names ?? <span class="muted">none</span>}</td>
                   <td class="muted">{t.last_used_at ? day(t.last_used_at) : "never"}</td>
                   <td class="muted">{t.expires_at ? day(t.expires_at) : "never"}</td>
                   <td>{t.revoked_at !== null ? <span class="badge bad">revoked</span> : t.expires_at !== null && t.expires_at <= props.now ? <span class="badge bad">expired</span> : <span class="badge ok">active</span>}</td>
@@ -299,15 +299,14 @@ export function AdminTokens(props: { tokens: (PushTokenRow & { repo_names: strin
         <h2>New token</h2>
         <form method="post" action="/admin/tokens" class="stack">
           <label>Name<input type="text" name="name" required placeholder="laptop" /></label>
+          <fieldset>
+            <legend>Repositories</legend>
+            <label><input type="checkbox" name="all" value="1" /> All repositories, including new ones</label>
+            {props.repos.map((r) => <label><input type="checkbox" name="repos" value={r.id} /> {r.name}</label>)}
+          </fieldset>
           <label>Expires
             <ExpirySelect name="expires" selected="never" />
           </label>
-          {props.repos.length > 0 && (
-            <fieldset>
-              <legend>Limit to repos <span class="hint">none checked = all repos</span></legend>
-              {props.repos.map((r) => <label><input type="checkbox" name="repos" value={r.id} /> {r.name}</label>)}
-            </fieldset>
-          )}
           <button type="submit" class="primary">Create token</button>
         </form>
       </section>

@@ -157,13 +157,24 @@ describe("invites and tokens", () => {
     expect(opts((await call("GET", "/admin/invites")).html, "access")).toEqual(["7d", "30d*", "1y", "never"]);
     expect(opts((await call("GET", "/admin/tokens")).html, "expires")).toEqual(["7d", "30d", "1y", "never*"]);
   });
+  it("refuses a token that doesn't say which repos it covers", async () => {
+    const r = await call("POST", "/admin/tokens", { name: "vague" });
+    expect(r.status).toBe(422);
+    expect(r.html).toContain("All repositories");
+  });
   it("creates a push token that git accepts, then revokes it", async () => {
-    const r = await call("POST", "/admin/tokens", { name: "laptop" });
+    const r = await call("POST", "/admin/tokens", { name: "laptop", all: "1" });
     const tok = secretOf(r.html)!;
     expect(r.html).toContain(`echo url=https://x:${tok}@git.test|git credential approve`);
     const id = (await call("POST", "/admin/repos", { name: "tk" })).location!.split("/").pop()!;
     expect(await tokens.findValidPushTokenId(env.DB, await sha256Hex(tok), id, Date.now())).not.toBeNull();
     const listed = (await tokens.listPushTokens(env.DB))[0];
+    expect(listed.expires_at).toBeNull();
+    expect(listed.all_repos_at).not.toBeNull();
+    await call("POST", "/admin/tokens", { name: "ci", repos: [id], expires: "7d" });
+    const ci = (await tokens.listPushTokens(env.DB)).find((t) => t.name === "ci")!;
+    expect(ci.expires_at! - Date.now()).toBeGreaterThan(7 * 86_400_000 - 60_000);
+    expect(ci.all_repos_at).toBeNull();
     await call("POST", `/admin/tokens/${listed.id}/revoke`, {});
     expect(await tokens.findValidPushTokenId(env.DB, await sha256Hex(tok), id, Date.now())).toBeNull();
   });

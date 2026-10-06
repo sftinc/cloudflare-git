@@ -4,19 +4,21 @@ export type PushTokenRow = {
   id: string;
   name: string;
   token_hash: string;
-  last_used_at: number | null;
-  revoked_at: number | null;
+  expires_at: number | null;
+  all_repos_at: number | null;
   created_at: number;
   updated_at: number;
-  expires_at: number | null;
+  last_used_at: number | null;
+  revoked_at: number | null;
   deleted_at: number | null;
 };
 
-export async function createPushToken(db: D1Database, t: { name: string; tokenHash: string; repoIds: string[]; expiresAt?: number | null }, now: number) {
+export async function createPushToken(db: D1Database, t: { name: string; tokenHash: string; repoIds: string[]; allRepos?: boolean; expiresAt?: number | null }, now: number) {
   const id = uuidv7(now);
   await db.batch([
-    db.prepare("INSERT INTO push_tokens (id, name, token_hash, created_at, updated_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)").bind(id, t.name, t.tokenHash, now, now, t.expiresAt ?? null),
-    ...t.repoIds.map((repoId) =>
+    db.prepare("INSERT INTO push_tokens (id, name, token_hash, created_at, updated_at, expires_at, all_repos_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .bind(id, t.name, t.tokenHash, now, now, t.expiresAt ?? null, t.allRepos ? now : null),
+    ...(t.allRepos ? [] : t.repoIds).map((repoId) =>
       db.prepare("INSERT INTO push_token_repos (push_token_id, repo_id, created_at) VALUES (?, ?, ?)").bind(id, repoId, now),
     ),
   ]);
@@ -28,7 +30,7 @@ export async function findValidPushTokenId(db: D1Database, tokenHash: string, re
     .prepare(
       `SELECT t.id FROM push_tokens t
        WHERE t.token_hash = ?1 AND t.revoked_at IS NULL AND t.deleted_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > ?3)
-         AND (NOT EXISTS (SELECT 1 FROM push_token_repos r WHERE r.push_token_id = t.id AND r.deleted_at IS NULL)
+         AND (t.all_repos_at IS NOT NULL
               OR EXISTS (SELECT 1 FROM push_token_repos r WHERE r.push_token_id = t.id AND r.repo_id = ?2 AND r.deleted_at IS NULL))`,
     )
     .bind(tokenHash, repoId, now)
