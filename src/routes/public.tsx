@@ -2,7 +2,7 @@ import { Hono, type Context } from "hono";
 import type { AppEnv } from "../index";
 import { artifactsErrorCode, listBranches } from "../artifacts";
 import { canView, getViewer, visibleRepos } from "../auth/viewer";
-import { findLiveRepo, type RepoRow } from "../db/repos";
+import { findLiveAlias, findLiveRepo, type RepoRow } from "../db/repos";
 import { highlightCode } from "../render/highlight";
 import { renderMarkdown } from "../render/markdown";
 import { cloneUrl, decodePath, repoHref, splitRefPath } from "../render/paths";
@@ -19,9 +19,16 @@ type Loaded = { repo: RepoRow; branches: string[]; head: string | null; tags: st
 
 export const publicRoutes = new Hono<AppEnv>();
 
-async function load(c: Context<AppEnv>): Promise<Loaded | null> {
-  const repo = await findLiveRepo(c.env.DB, c.req.param("repo")!);
-  if (!repo || !(await canView(c.env.DB, await getViewer(c), repo, Date.now()))) return null;
+/** The repo's data, or the response to send instead: 404, or a redirect when the name is an old one. */
+async function load(c: Context<AppEnv>): Promise<Loaded | Response> {
+  const name = c.req.param("repo")!;
+  const live = await findLiveRepo(c.env.DB, name);
+  const repo = live ?? (await findLiveAlias(c.env.DB, name));
+  if (!repo || !(await canView(c.env.DB, await getViewer(c), repo, Date.now()))) return c.notFound();
+  if (!live) {
+    const url = new URL(c.req.url);
+    return c.redirect(url.pathname.replace(repoHref(name), repoHref(repo.name)) + url.search, 302);
+  }
   const { branches, head, tags } = await listBranches(c.env.ARTIFACTS, repo.storage_name);
   return { repo, branches, head, tags, cloneUrl: cloneUrl(siteOrigin(c), repo.name) };
 }
@@ -84,24 +91,26 @@ publicRoutes.get("/", async (c) => {
 
 publicRoutes.get(`/r/:repo{${NAME}}`, async (c) => {
   const l = await load(c);
-  if (!l) return c.notFound();
+  if (l instanceof Response) return l;
   if (l.branches.length === 0) return page(c, l.repo.name, <EmptyRepo repo={l.repo} cloneUrl={l.cloneUrl} />);
   return renderTree(c, l, l.head ?? l.branches[0], "");
 });
 
 publicRoutes.get(`/r/:repo{${NAME}}/tree/*`, async (c) => {
   const l = await load(c);
-  const r = l && rest(c, l, "tree");
-  const at = l && r !== null ? splitRefPath(r, l.branches) : null;
-  if (!l || !at) return c.notFound();
+  if (l instanceof Response) return l;
+  const r = rest(c, l, "tree");
+  const at = r !== null ? splitRefPath(r, l.branches) : null;
+  if (!at) return c.notFound();
   return renderTree(c, l, at.branch, at.path);
 });
 
 publicRoutes.get(`/r/:repo{${NAME}}/blob/*`, async (c) => {
   const l = await load(c);
-  const r = l && rest(c, l, "blob");
-  const at = l && r !== null ? splitRefPath(r, l.branches) : null;
-  if (!l || !at || !at.path) return c.notFound();
+  if (l instanceof Response) return l;
+  const r = rest(c, l, "blob");
+  const at = r !== null ? splitRefPath(r, l.branches) : null;
+  if (!at || !at.path) return c.notFound();
   using h = await c.env.ARTIFACTS.get(l.repo.storage_name);
   let blob: Blob | null;
   try {
@@ -150,8 +159,9 @@ publicRoutes.get(`/r/:repo{${NAME}}/blob/*`, async (c) => {
 
 publicRoutes.get(`/r/:repo{${NAME}}/commits/*`, async (c) => {
   const l = await load(c);
-  const branch = l && rest(c, l, "commits");
-  if (!l || !branch || !l.branches.includes(branch)) return c.notFound();
+  if (l instanceof Response) return l;
+  const branch = rest(c, l, "commits");
+  if (!branch || !l.branches.includes(branch)) return c.notFound();
   const pageNo = Math.max(1, Number.parseInt(c.req.query("page") ?? "1", 10) || 1);
   using h = await c.env.ARTIFACTS.get(l.repo.storage_name);
   const list = await h.log({ ref: branch, limit: PER_PAGE + 1, offset: (pageNo - 1) * PER_PAGE });

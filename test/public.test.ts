@@ -237,6 +237,44 @@ describe("files", () => {
   });
 });
 
+describe("old names", () => {
+  const rename = (name: string, to: string) => repos.findRepoByName(env.DB, name).then((r) => repos.renameRepo(env.DB, r!.id, to, 2));
+  const at = async (path: string, headers: Record<string, string> = {}) => {
+    const r = await html(path, e(), headers);
+    return { status: r.status, location: r.headers.get("location") };
+  };
+
+  it("redirects every old name straight to the current one, keeping path and query", async () => {
+    await addRepo("al-foo", true);
+    await rename("al-foo", "al-bar");
+    await rename("al-bar", "al-baz");
+    for (const old of ["al-foo", "al-bar"]) {
+      expect(await at(`/r/${old}`)).toEqual({ status: 302, location: "/r/al-baz" });
+      expect(await at(`/r/${old}/blob/main/a.txt?raw=1`)).toEqual({ status: 302, location: "/r/al-baz/blob/main/a.txt?raw=1" });
+      expect((await at(`/r/${old}/tree/main/src`)).location).toBe("/r/al-baz/tree/main/src");
+      expect((await at(`/r/${old}/commits/main?page=2`)).location).toBe("/r/al-baz/commits/main?page=2");
+    }
+  });
+  it("hides a private repo's new name from strangers but redirects the owner", async () => {
+    await addRepo("al-priv", false);
+    await rename("al-priv", "al-priv2");
+    expect(await at("/r/al-priv")).toEqual({ status: 404, location: null });
+    const own = await html("/r/al-priv", await ownerEnv({ ARTIFACTS: fake }), { cookie: `CF_Authorization=${await ownerToken()}` });
+    expect([own.status, own.headers.get("location")]).toEqual([302, "/r/al-priv2"]);
+  });
+  it("lets another repo take a released old name and serves it", async () => {
+    await addRepo("al-one", true);
+    await addRepo("al-two", true);
+    fake.seed("al-two", { branches: { main: { files: { "README.md": "# Two" } } } });
+    await rename("al-one", "al-uno");
+    expect((await at("/r/al-one")).status).toBe(302);
+    await rename("al-two", "al-one");
+    const r = await html("/r/al-one");
+    expect(r.status).toBe(200);
+    expect(r.body).toContain("<h1>Two</h1>");
+  });
+});
+
 describe("commits", () => {
   it("paginates 30 per page", async () => {
     const p1 = await html("/r/site/commits/main");
