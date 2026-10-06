@@ -100,6 +100,18 @@ describe("repos", () => {
     const none = (await call("POST", "/admin/repos", { name: "no-vis" })).location!.split("/").pop()!;
     expect((await repos.findRepoById(env.DB, none))!.public_at).toBeNull();
   });
+  it("limits the description to 350 characters when creating or importing", async () => {
+    expect((await call("GET", "/admin/repos/new")).html).toContain("350 characters remaining");
+    const long = "x".repeat(351);
+    for (const [path, form] of [["/admin/repos", { name: "long-desc" }], ["/admin/import", { name: "long-imp", url: "https://github.com/a/b" }]] as const) {
+      const r = await call("POST", path, { ...form, description: long });
+      expect(r.status).toBe(422);
+      expect(r.html).toContain("350 characters or fewer");
+      expect(r.html).toContain(`value="${long}"`);
+    }
+    expect(fake.repos.has("long-desc")).toBe(false);
+    expect((await call("POST", "/admin/repos", { name: "ok-desc", description: "x".repeat(350) })).status).toBe(303);
+  });
   it("keeps the private choice when the form re-renders", async () => {
     const r = await call("POST", "/admin/repos", { name: "Bad Name", visibility: "private" });
     expect(r.html).toMatch(/<option value="private" selected/);

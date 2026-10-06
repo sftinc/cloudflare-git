@@ -6,10 +6,10 @@ import { createInvite, deleteInvite, inviteStatus, listInvites, revokeInvite } f
 import { createPushToken, deletePushToken, listPushTokens, revokePushToken } from "../db/tokens";
 import { createWebhook, deleteWebhook, listWebhooks } from "../db/webhooks";
 import { randomSecret, sha256Hex } from "../lib/crypto";
-import { provisionRepo, refreshProvisioning, type ProvisionInput, type ProvisionStatus } from "../provision";
+import { DESCRIPTION_MAX, provisionRepo, refreshProvisioning, type ProvisionInput, type ProvisionStatus } from "../provision";
 import { siteOrigin } from "../lib/site";
 import { page } from "../views/layout";
-import { ACCESS_LENGTHS, AdminInvites, DESCRIPTION_MAX, AdminNewRepo, AdminRepo, AdminRepos, AdminTokens, REDEEM_WINDOWS, type RepoFormValues } from "../views/admin";
+import { ACCESS_LENGTHS, AdminInvites, AdminNewRepo, AdminRepo, AdminRepos, AdminTokens, REDEEM_WINDOWS, type RepoFormValues } from "../views/admin";
 
 export const adminRoutes = new Hono<AppEnv>();
 

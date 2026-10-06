@@ -17,6 +17,8 @@ const MESSAGES: Record<string, string> = {
   MEMORY_LIMIT: "The repository is too large to import. Push a mirror instead (see README).",
 };
 
+export const DESCRIPTION_MAX = 350; // same as GitHub
+
 export function validateRepoName(name: string): string | null {
   if (!/^[a-z0-9][a-z0-9-]{1,62}$/.test(name)) return "Use 2-63 lowercase letters, digits or hyphens, starting with a letter or digit.";
   return null;
@@ -25,6 +27,7 @@ export function validateRepoName(name: string): string | null {
 function checkInput(input: ProvisionInput): ProvisionResult | null {
   const nameError = validateRepoName(input.name);
   if (nameError) return { ok: false, error: nameError };
+  if (input.description.length > DESCRIPTION_MAX) return { ok: false, error: `Keep the description to ${DESCRIPTION_MAX} characters or fewer.` };
   if (input.kind === "create" && input.defaultBranch && !/^[A-Za-z0-9._/-]{1,100}$/.test(input.defaultBranch)) {
     return { ok: false, error: "That default branch name isn't valid." };
   }

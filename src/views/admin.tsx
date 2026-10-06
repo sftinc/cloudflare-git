@@ -5,11 +5,10 @@ import type { WebhookRow } from "../db/webhooks";
 import { fmtDate, NO_REPOS_OWNER } from "./public";
 import { repoHref } from "../render/paths";
 import { GitSetup } from "./git-setup";
+import { DESCRIPTION_MAX } from "../provision";
 import { Book, Download, Plus } from "./icons";
 
 const day = (ms: number) => fmtDate(Math.floor(ms / 1000));
-
-export const DESCRIPTION_MAX = 350; // same as GitHub
 
 export type RepoFormValues = { name?: string; description?: string; defaultBranch?: string; url?: string; branch?: string; visibility?: string };
 
@@ -95,13 +94,20 @@ export function AdminRepos(props: { repos: RepoRow[]; pending: Set<string> }) {
   );
 }
 
+const remaining = (text: string) => `${Math.max(0, DESCRIPTION_MAX - text.length)} characters remaining`;
+
 const NAME_INPUT = { type: "text", name: "name", required: true, pattern: "[a-z0-9][a-z0-9\\-]{1,62}", title: "2-63 lowercase letters, digits or hyphens, starting with a letter or digit" };
 
 export function AdminNewRepo(props: { kind: "create" | "import"; error?: string; values?: RepoFormValues; restoreId?: string }) {
   const v = props.values ?? {};
   const create = props.kind === "create";
   const name = <label>Name <span class="hint">lowercase letters, digits, hyphens</span><input {...NAME_INPUT} value={v.name ?? ""} /></label>;
-  const description = <label>Description <span class="hint">optional</span><input type="text" name="description" value={v.description ?? ""} /></label>;
+  const description = (
+    <label>Description <span class="hint">optional</span>
+      <input type="text" name="description" maxlength={DESCRIPTION_MAX} value={v.description ?? ""} aria-describedby="description-remaining" data-remaining="description-remaining" />
+      <span class="hint remaining" id="description-remaining">{remaining(v.description ?? "")}</span>
+    </label>
+  );
   return (
     <>
       <h1 class="page-title">New repo</h1>
@@ -172,7 +178,7 @@ export function AdminRepo(props: {
                 <input type="text" id="description" name="description" maxlength={DESCRIPTION_MAX} placeholder="Short description of this repo" value={description} aria-describedby="description-remaining" data-remaining="description-remaining" />
                 <button type="submit">Save</button>
               </div>
-              <span class="hint" id="description-remaining">{Math.max(0, DESCRIPTION_MAX - description.length)} characters remaining</span>
+              <span class="hint" id="description-remaining">{remaining(description)}</span>
             </form>
           </div>
           <h2 class="section-title">Webhooks</h2>
