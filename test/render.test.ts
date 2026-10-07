@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { renderMarkdown } from "../src/render/markdown";
 import { highlightCode } from "../src/render/highlight";
 import { blobHref, decodePath, encodePath, resolveRelative, splitRefPath, treeHref } from "../src/render/paths";
+import type { Ref } from "../src/artifacts";
 
 const ctx = { repo: "site", branch: "feature/x", dir: "docs" };
 
@@ -53,10 +54,15 @@ describe("paths", () => {
     expect(decodePath("docs/%E2%9C%93%20ok")).toBe("docs/✓ ok");
     expect(decodePath("bad%E0%A4%A")).toBeNull();
   });
-  it("picks the longest matching branch", () => {
-    expect(splitRefPath("feature/x/src/a.ts", ["feature", "feature/x", "main"])).toEqual({ branch: "feature/x", path: "src/a.ts" });
-    expect(splitRefPath("main", ["main"])).toEqual({ branch: "main", path: "" });
-    expect(splitRefPath("nope/a", ["main"])).toBeNull();
+  it("picks the longest matching ref, and a branch over a tag of the same name", () => {
+    const sha = "a".repeat(40);
+    const b = (name: string): Ref => ({ name, kind: "branch", sha });
+    const t = (name: string): Ref => ({ name, kind: "tag", sha });
+    const refs = [b("feature"), b("feature/x"), b("main"), t("main"), t("rel/1.0")]; // branches first, as the routes pass them
+    expect(splitRefPath("feature/x/src/a.ts", refs)).toEqual({ ref: refs[1], path: "src/a.ts" });
+    expect(splitRefPath("main", refs)).toEqual({ ref: refs[2], path: "" });
+    expect(splitRefPath("rel/1.0/docs/", refs)).toEqual({ ref: refs[4], path: "docs" });
+    expect(splitRefPath("nope/a", refs)).toBeNull();
   });
   it("resolves relative paths inside the repo only", () => {
     expect(resolveRelative("docs", "./a.md")).toBe("docs/a.md");

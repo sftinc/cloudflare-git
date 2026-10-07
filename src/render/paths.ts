@@ -1,3 +1,4 @@
+import type { Ref } from "../artifacts";
 export function encodePath(path: string): string {
   return path.split("/").map(encodeURIComponent).join("/");
 }
@@ -10,11 +11,11 @@ export function decodePath(raw: string): string | null {
   }
 }
 
-/** Branch names may contain "/", so the longest known branch that prefixes the path wins. */
-export function splitRefPath(rest: string, branches: string[]): { branch: string; path: string } | null {
-  for (const b of [...branches].sort((x, y) => y.length - x.length)) {
-    if (rest === b) return { branch: b, path: "" };
-    if (rest.startsWith(`${b}/`)) return { branch: b, path: rest.slice(b.length + 1).replace(/\/+$/, "") };
+/** Ref names may contain "/", so the longest known ref that prefixes the path wins. `refs` lists branches before tags, so on an identical name the (stable) sort keeps the branch first. */
+export function splitRefPath(rest: string, refs: Ref[]): { ref: Ref; path: string } | null {
+  for (const r of [...refs].sort((x, y) => y.name.length - x.name.length)) {
+    if (rest === r.name) return { ref: r, path: "" };
+    if (rest.startsWith(`${r.name}/`)) return { ref: r, path: rest.slice(r.name.length + 1).replace(/\/+$/, "") };
   }
   return null;
 }

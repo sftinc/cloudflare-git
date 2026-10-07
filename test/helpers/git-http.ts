@@ -41,10 +41,15 @@ export function stubArtifactsGit(fake: FakeArtifacts, extra?: Handler) {
       const r = fake.repos.get(m[1]);
       if (!r) return new Response("not found", { status: 404 });
       const refs: Record<string, string> = {};
-      for (const b of r.commits.keys()) refs[`refs/heads/${b}`] = fakeHash(`commit:${b}:0`);
+      for (const b of r.commits.keys()) if (!b.startsWith("refs/tags/")) refs[`refs/heads/${b}`] = fakeHash(`commit:${b}:0`);
       for (const t of r.tags) {
         refs[`refs/tags/${t}`] = fakeHash(`tag:${t}`);
-        refs[`refs/tags/${t}^{}`] = fakeHash(`commit:${t}`); // annotated tags are advertised twice
+        refs[`refs/tags/${t}^{}`] = fakeHash(`commit:${t}`); // annotated tags are advertised twice; this peeled hash matches no fake commit
+      }
+      for (const [t, annotated] of r.tagged) {
+        const commit = fakeHash(`commit:refs/tags/${t}:0`);
+        refs[`refs/tags/${t}`] = annotated ? fakeHash(`tag:${t}`) : commit; // a lightweight tag points at the commit itself
+        if (annotated) refs[`refs/tags/${t}^{}`] = commit;
       }
       // Artifacts advertises HEAD's symref even when that branch has never been pushed.
       return new Response(refAdvertisement(refs, r.defaultBranch), {

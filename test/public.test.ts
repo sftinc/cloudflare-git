@@ -18,7 +18,7 @@ async function addRepo(name: string, isPublic: boolean) {
 }
 
 beforeEach(async () => {
-  await env.DB.prepare("DELETE FROM repos WHERE name IN ('site','secret','empty','legacy')").run();
+  await env.DB.prepare("DELETE FROM repos WHERE name IN ('site','secret','empty','legacy','rich')").run();
   clearArtifactsCaches();
   resetAccessKeys();
   fake = new FakeArtifacts();
@@ -44,10 +44,25 @@ beforeEach(async () => {
     },
   });
   fake.seed("secret", { branches: { main: { files: { "README.md": "# Secret" } } } });
+  fake.seed("rich", {
+    defaultBranch: "main",
+    tags: ["dangling"], // a tag on something that is not a commit
+    branches: {
+      main: { files: { "a.txt": "on main" } },
+      v2: { files: { "a.txt": "branch v2" }, commits: [{ message: "Branch v2 commit" }] },
+    },
+    tagged: {
+      v1: { files: { "a.txt": "at tag v1", "old/b.txt": "b" }, commits: [{ message: "Tagged v1" }] },
+      "v1.1": { files: { "a.txt": "at tag v1.1", "old/b.txt": "b" }, commits: [{ message: "Tagged v1.1" }], annotated: true },
+      "rel/1.0": { files: { "a.txt": "at tag rel/1.0", "old/b.txt": "b" }, commits: [{ message: "Tagged rel/1.0" }] },
+      v2: { files: { "a.txt": "tag v2" }, commits: [{ message: "Tag v2 commit" }] },
+    },
+  });
   await fake.create("empty");
   await addRepo("site", true);
   await addRepo("secret", false);
   await addRepo("empty", true);
+  await addRepo("rich", true);
   stubArtifactsGit(fake);
 });
 afterEach(() => vi.restoreAllMocks());
@@ -293,6 +308,19 @@ describe("commits", () => {
     expect(r.body).toContain('aria-disabled="true">← Newer');
     expect((await html("/r/site/commits/feature/login")).body).not.toContain('class="pager"'); // one page: no pager
   });
+  it("404s a page past the last commit, and reads a bad page number as page 1", async () => {
+    expect((await html("/r/site/commits/main?page=3")).status).toBe(404);
+    expect((await html("/r/site/commits/main?page=999999999999")).status).toBe(404);
+    for (const bad of ["0", "-2", "abc", ""]) {
+      const r = await html(`/r/site/commits/main?page=${bad}`);
+      expect(r.status).toBe(200);
+      expect(r.body).toContain("Commit 35");
+    }
+  });
+  it("needs an exact ref in the URL", async () => {
+    expect((await html("/r/site/commits/feature/login")).status).toBe(200);
+    for (const path of ["/r/site/commits/main/extra", "/r/site/commits/feature", "/r/site/commits/"]) expect((await html(path)).status).toBe(404);
+  });
 });
 
 describe("errors", () => {
@@ -301,5 +329,31 @@ describe("errors", () => {
     const r = await html("/r/site");
     expect(r.status).toBe(502);
     expect(r.body).toContain("Storage unavailable");
+  });
+});
+
+describe("tags", () => {
+  it.each(["v1", "v1.1", "rel/1.0"])("browses the tree, a blob and the commits at tag %s", async (tag) => {
+    const tree = await html(`/r/rich/tree/${tag}`);
+    expect(tree.status).toBe(200);
+    expect(tree.body).toContain(`href="/r/rich/tree/${tag}/old"`); // a folder main does not have
+    expect(tree.body).toContain(`href="/r/rich/blob/${tag}/a.txt"`);
+    const blob = await html(`/r/rich/blob/${tag}/a.txt`);
+    expect(blob.status).toBe(200);
+    expect(blob.body).toContain(`at tag ${tag}`);
+    expect((await html(`/r/rich/blob/${tag}/old/b.txt`)).status).toBe(200);
+    const log = await html(`/r/rich/commits/${tag}`);
+    expect(log.status).toBe(200);
+    expect(log.body).toContain(`Tagged ${tag}`);
+  });
+  it("a branch wins over a tag of the same name", async () => {
+    const blob = await html("/r/rich/blob/v2/a.txt");
+    expect(blob.body).toContain("branch v2");
+    expect(blob.body).not.toContain("tag v2");
+    expect((await html("/r/rich/commits/v2")).body).toContain("Branch v2 commit");
+    expect((await html("/r/rich/tree/v2")).body).toContain('href="/r/rich/blob/v2/a.txt"');
+  });
+  it("a tag that does not point at a commit is a 404", async () => {
+    for (const path of ["/r/rich/tree/dangling", "/r/rich/blob/dangling/a.txt", "/r/rich/commits/dangling"]) expect((await html(path)).status).toBe(404);
   });
 });

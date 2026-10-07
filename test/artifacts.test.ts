@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { UpstreamError, artifactsErrorCode, clearArtifactsCaches, getRepoAccess, listBranches } from "../src/artifacts";
-import { FakeArtifacts, artifactsDevError, artifactsError } from "./helpers/fake-artifacts";
+import { FakeArtifacts, artifactsDevError, artifactsError, fakeHash } from "./helpers/fake-artifacts";
 import { stubArtifactsGit, stubFetch } from "./helpers/git-http";
 
 beforeEach(() => clearArtifactsCaches());
@@ -24,19 +24,38 @@ describe("getRepoAccess", () => {
   });
 });
 
+const branch = (name: string) => ({ name, kind: "branch", sha: fakeHash(`commit:${name}:0`) });
+
 describe("listBranches", () => {
-  it("returns branches with HEAD first, and tags", async () => {
+  it("returns branches with HEAD first, and tags, each with its SHA", async () => {
     const fake = new FakeArtifacts();
     fake.seed("site", { defaultBranch: "main", tags: ["v1", "v2"], branches: { "feature/x": { files: { a: "1" } }, main: { files: { a: "1" } } } });
     stubArtifactsGit(fake);
     // Annotated tags are advertised twice (tag and peeled "^{}"); each counts once.
-    expect(await listBranches(asArt(fake), "site")).toEqual({ branches: ["main", "feature/x"], head: "main", tags: ["v1", "v2"] });
+    expect(await listBranches(asArt(fake), "site")).toEqual({
+      branches: [branch("main"), branch("feature/x")],
+      head: "main",
+      tags: [
+        { name: "v1", kind: "tag", sha: fakeHash("commit:v1") },
+        { name: "v2", kind: "tag", sha: fakeHash("commit:v2") },
+      ],
+    });
+  });
+  it("gives a tag its peeled commit SHA, whether it is lightweight or annotated", async () => {
+    const fake = new FakeArtifacts();
+    fake.seed("site", { branches: { main: { files: { a: "1" } } }, tagged: { light: { files: { a: "2" } }, annotated: { files: { a: "3" }, annotated: true } } });
+    stubArtifactsGit(fake);
+    const { tags } = await listBranches(asArt(fake), "site");
+    expect(Object.fromEntries(tags.map((t) => [t.name, t.sha]))).toEqual({
+      light: fakeHash("commit:refs/tags/light:0"),
+      annotated: fakeHash("commit:refs/tags/annotated:0"), // not the tag object's own SHA, fakeHash("tag:annotated")
+    });
   });
   it("reports no head when HEAD's symref names a branch that does not exist", async () => {
     const fake = new FakeArtifacts();
     fake.seed("site", { defaultBranch: "main", branches: { master: { files: { a: "1" } }, dev: { files: { a: "1" } } } });
     stubArtifactsGit(fake);
-    expect(await listBranches(asArt(fake), "site")).toEqual({ branches: ["dev", "master"], head: null, tags: [] });
+    expect(await listBranches(asArt(fake), "site")).toEqual({ branches: [branch("dev"), branch("master")], head: null, tags: [] });
   });
   it("drops the cached token when the advertisement is 401/403", async () => {
     const fake = new FakeArtifacts();

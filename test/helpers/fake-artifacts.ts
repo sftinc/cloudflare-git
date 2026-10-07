@@ -1,10 +1,12 @@
 type Content = string | Uint8Array;
+type Chain = { files: Record<string, Content>; commits?: { message: string; author?: string; authoredAt?: number }[] };
 type Seed = {
   defaultBranch?: string;
-  tags?: string[];
+  tags?: string[]; // tags on an object that is not a commit: listed, but there is nothing to read
+  tagged?: Record<string, Chain & { annotated?: boolean }>; // tags on a commit chain of their own
   lastPushAt?: string;
   source?: string;
-  branches: Record<string, { files: Record<string, Content>; commits?: { message: string; author?: string; authoredAt?: number }[] }>;
+  branches: Record<string, Chain>;
 };
 type RepoData = {
   name: string;
@@ -13,9 +15,10 @@ type RepoData = {
   status: "ready" | "importing";
   trees: Map<string, ArtifactsTreeEntry[]>;
   blobs: Map<string, Uint8Array>;
-  commits: Map<string, ArtifactsCommitMetadata[]>; // branch -> newest first
-  files: Map<string, Map<string, Uint8Array>>; // branch -> path -> bytes
+  commits: Map<string, ArtifactsCommitMetadata[]>; // branch name, or "refs/tags/<name>" for a tagged chain -> newest first
+  files: Map<string, Map<string, Uint8Array>>; // same keys -> path -> bytes
   tags: string[];
+  tagged: Map<string, boolean>; // tag name -> annotated
   lastPushAt: string | null;
   source: string | null;
 };
@@ -79,7 +82,7 @@ export class FakeArtifacts {
       name, defaultBranch, status,
       remote: `https://fake.artifacts.test/git/ns/${name}.git`,
       trees: new Map(), blobs: new Map(), commits: new Map(), files: new Map(),
-      tags: [], lastPushAt: null, source: null,
+      tags: [], tagged: new Map(), lastPushAt: null, source: null,
     };
   }
 
@@ -129,18 +132,24 @@ export class FakeArtifacts {
   seed(name: string, seed: Seed) {
     const r = this.empty(name, seed.defaultBranch ?? "main", "ready");
     Object.assign(r, { tags: seed.tags ?? [], lastPushAt: seed.lastPushAt ?? null, source: seed.source ?? null });
-    for (const [branch, b] of Object.entries(seed.branches)) {
+    // One commit chain per branch and per tagged tag; the key also keeps their hashes apart.
+    const addChain = (key: string, b: Chain) => {
       const files = new Map<string, Uint8Array>();
       for (const [p, c] of Object.entries(b.files)) files.set(p, typeof c === "string" ? enc.encode(c) : c);
-      r.files.set(branch, files);
-      const root = this.buildTree(r, branch, "", files);
+      r.files.set(key, files);
+      const root = this.buildTree(r, key, "", files);
       const msgs = b.commits ?? [{ message: "Initial commit" }];
-      r.commits.set(branch, msgs.map((m, i) => ({
-        hash: fakeHash(`commit:${branch}:${i}`), treeHash: root, message: m.message,
+      r.commits.set(key, msgs.map((m, i) => ({
+        hash: fakeHash(`commit:${key}:${i}`), treeHash: root, message: m.message,
         author: { name: m.author ?? "Owner", email: "owner@example.com" },
         committer: { name: m.author ?? "Owner", email: "owner@example.com" },
         parents: [], authoredAt: m.authoredAt ?? 1_760_000_000 - i * 3600, committedAt: m.authoredAt ?? 1_760_000_000 - i * 3600,
       })));
+    };
+    for (const [branch, b] of Object.entries(seed.branches)) addChain(branch, b);
+    for (const [tag, t] of Object.entries(seed.tagged ?? {})) {
+      addChain(`refs/tags/${tag}`, t);
+      r.tagged.set(tag, t.annotated ?? false);
     }
     this.repos.set(name, r);
     return r;
@@ -179,8 +188,17 @@ class FakeRepo {
     const exp = Math.floor(Date.now() / 1000) + ttl;
     return { id: fakeHash(`tok:${this.parent.tokens.length}`), plaintext: `art_v1_${scope}${this.parent.tokens.length}?expires=${exp}`, scope, expiresAt: new Date(exp * 1000).toISOString() };
   }
+  /** Artifacts takes a commit ID. The fake takes nothing else, so a route that passes a name fails its test. */
+  private find(ref: string): { key: string; at: number } | null {
+    for (const [key, list] of this.r.commits) {
+      const at = list.findIndex((c) => c.hash === ref);
+      if (at >= 0) return { key, at };
+    }
+    return null;
+  }
   async log(opts: { ref?: string; limit?: number; offset?: number } = {}) {
-    const list = this.r.commits.get(opts.ref ?? this.r.defaultBranch) ?? [];
+    const found = opts.ref === undefined ? { key: this.r.defaultBranch, at: 0 } : this.find(opts.ref);
+    const list = found ? (this.r.commits.get(found.key) ?? []).slice(found.at) : [];
     const off = opts.offset ?? 0;
     return list.slice(off, off + (opts.limit ?? 50));
   }
@@ -192,7 +210,8 @@ class FakeRepo {
   }
   async readFile(args: { ref: string; path: string }) {
     this.parent.maybeFail("readFile");
-    const b = this.r.files.get(args.ref)?.get(args.path);
+    const found = this.find(args.ref);
+    const b = found && this.r.files.get(found.key)?.get(args.path);
     return b ? new Blob([b], { type: "text/plain;charset=utf-8" }) : null;
   }
   async listTokens() { return { tokens: [], total: 0 }; }

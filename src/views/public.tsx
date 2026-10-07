@@ -1,6 +1,7 @@
 import type { Child } from "hono/jsx";
 import { raw } from "hono/html";
 import type { RepoRow } from "../db/repos";
+import type { Ref } from "../artifacts";
 import { blobHref, commitsHref, repoHref, treeHref } from "../render/paths";
 import { Book, Branch, Chevron, ChevronRight, Clock, Copy, Download, File, Folder, Upload } from "./icons";
 
@@ -86,7 +87,7 @@ function RepoHeader(props: { repo: RepoRow; children?: Child }) {
   );
 }
 
-function BranchSwitcher(props: { branches: string[]; current: string; href: (b: string) => string }) {
+function BranchSwitcher(props: { branches: Ref[]; current: string; href: (name: string) => string }) {
   return (
     <details class="branches">
       <summary>
@@ -95,7 +96,7 @@ function BranchSwitcher(props: { branches: string[]; current: string; href: (b: 
       <ul>
         {props.branches.map((b) => (
           <li>
-            <a href={props.href(b)} class={b === props.current ? "current" : undefined}>{b}</a>
+            <a href={props.href(b.name)} class={b.name === props.current ? "current" : undefined}>{b.name}</a>
           </li>
         ))}
       </ul>
@@ -188,7 +189,7 @@ function About(props: { repo: RepoRow; branch: string; head: string | null; read
 }
 
 export function TreeView(props: {
-  repo: RepoRow; branch: string; branches: string[]; tags: string[]; head: string | null; path: string; levels: ArtifactsTreeEntry[][];
+  repo: RepoRow; branch: string; branches: Ref[]; tags: Ref[]; head: string | null; path: string; levels: ArtifactsTreeEntry[][];
   commit: ArtifactsCommitMetadata; readme: string | null; readmeName: string | null; info: ArtifactsRepoInfo | null; cloneUrl: string; now: number;
 }) {
   const { repo, branch, path, commit } = props;
@@ -254,7 +255,7 @@ export function TreeView(props: {
 }
 
 export function BlobView(props: {
-  repo: RepoRow; branch: string; branches: string[]; path: string; levels: ArtifactsTreeEntry[][]; size: number; lines: number;
+  repo: RepoRow; branch: string; branches: Ref[]; path: string; levels: ArtifactsTreeEntry[][]; size: number; lines: number;
   binary: boolean; truncated: boolean; html: string | null; markdown: boolean; showingSource: boolean;
 }) {
   const { repo, branch, path } = props;
@@ -304,7 +305,7 @@ export function BlobView(props: {
 const fmtDayLong = (sec: number) => new Date(sec * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 
 export function Commits(props: {
-  repo: RepoRow; branch: string; branches: string[]; commits: ArtifactsCommitMetadata[]; page: number; hasNext: boolean; now: number;
+  repo: RepoRow; branch: string; branches: Ref[]; commits: ArtifactsCommitMetadata[]; page: number; hasNext: boolean; now: number;
 }) {
   const { repo, branch } = props;
   const href = (p: number) => `${commitsHref(repo.name, branch)}?page=${p}`;
