@@ -41,7 +41,8 @@ function rest(c: Context<AppEnv>, l: Loaded, kind: string): string | null {
 }
 
 const sortEntries = (entries: ArtifactsTreeEntry[]) =>
-  [...entries].sort((a, b) => ((a.type === "tree") === (b.type === "tree") ? a.name.localeCompare(b.name) : a.type === "tree" ? -1 : 1));
+  [...entries].sort((a, b) =>
+    (a.type === "tree") === (b.type === "tree") ? a.name.localeCompare(b.name, undefined, { numeric: true }) : a.type === "tree" ? -1 : 1);
 
 /** The root folder and each folder down to `path`, sorted: the file tree's open levels. The last is `path` itself. */
 async function readLevels(h: ArtifactsRepo, rootTree: string, path: string) {

@@ -81,6 +81,8 @@ export async function listBranches(art: Artifacts, name: string) {
   }
   // HEAD's symref can name a branch that was never pushed (e.g. default "main", only "master" pushed).
   const head = advert.head !== null && branches.some((b) => b.name === advert.head) ? advert.head : null;
-  branches.sort((a, b) => (a.name === head ? -1 : b.name === head ? 1 : a.name.localeCompare(b.name)));
+  const byName = (a: Ref, b: Ref) => a.name.localeCompare(b.name, undefined, { numeric: true });
+  branches.sort((a, b) => (a.name === head ? -1 : b.name === head ? 1 : byName(a, b)));
+  tags.sort(byName);
   return { branches, head, tags };
 }

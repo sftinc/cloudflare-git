@@ -48,7 +48,7 @@ beforeEach(async () => {
     defaultBranch: "main",
     tags: ["dangling"], // a tag on something that is not a commit
     branches: {
-      main: { files: { "a.txt": "on main" } },
+      main: { files: { "a.txt": "on main", "f10.txt": "10", "f2.txt": "2", "f1.txt": "1", "docs/x.txt": "x" } },
       v2: { files: { "a.txt": "branch v2" }, commits: [{ message: "Branch v2 commit" }] },
     },
     tagged: {
@@ -174,6 +174,14 @@ describe("repo pages", () => {
     const file = await html("/r/site/blob/main/docs/my%20file%20%231.txt");
     expect(file.status).toBe(200);
     expect(file.body).toContain("spaces");
+  });
+  it("sorts names with numbers numerically, folders first", async () => {
+    const { body } = await html("/r/rich");
+    const at = (name: string) => body.indexOf(`${name}</a>`);
+    expect(at("docs")).toBeGreaterThan(-1);
+    expect(at("docs")).toBeLessThan(at("a.txt"));
+    expect(at("f1.txt")).toBeLessThan(at("f2.txt"));
+    expect(at("f2.txt")).toBeLessThan(at("f10.txt"));
   });
   it.each(["/r/site/tree/nope", "/r/site/tree/main/missing", "/r/site/blob/main/missing.txt", "/r/site/blob/main", "/r/site/commits/nope", "/r/nosuchrepo", "/r/site/blob/main/%E0%A4%A"])(
     "%s is a 404 page",

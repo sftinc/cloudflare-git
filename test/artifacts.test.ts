@@ -71,6 +71,14 @@ describe("listBranches", () => {
     stubFetch(() => new Response("nope", { status: 500 }));
     await expect(listBranches(asArt(fake), "site")).rejects.toBeInstanceOf(UpstreamError);
   });
+  it("sorts branches and tags numerically, with HEAD first", async () => {
+    const fake = new FakeArtifacts();
+    fake.seed("site", { defaultBranch: "main", tags: ["v10", "v2"], branches: { r10: { files: { a: "1" } }, r2: { files: { a: "1" } }, main: { files: { a: "1" } } } });
+    stubArtifactsGit(fake);
+    const { branches, tags } = await listBranches(asArt(fake), "site");
+    expect(branches.map((b) => b.name)).toEqual(["main", "r2", "r10"]);
+    expect(tags.map((t) => t.name)).toEqual(["v2", "v10"]);
+  });
 });
 
 describe("artifactsErrorCode", () => {
