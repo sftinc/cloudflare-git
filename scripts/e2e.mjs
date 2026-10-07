@@ -456,6 +456,11 @@ async function screenshots(ids, inviteForBrowser) {
     await send("Network.setExtraHTTPHeaders", { headers: { "Cf-Access-Jwt-Assertion": jwt } });
     await shot("admin-repos", `${ORIGIN}/admin/repos`);
     await shot("admin-invites", `${ORIGIN}/admin/invites`);
+    await shot("admin-renamed", `${ORIGIN}/admin/repos/${ids.pub}?renamed`);
+    const banner = () => evaluate("document.body.innerText.includes('Repository renamed.')");
+    check("renamed banner shows and drops ?renamed from the URL", (await banner()) && (await evaluate("location.search")) === "");
+    await load(await evaluate("location.href"));
+    check("a reload doesn't show the renamed banner again", (await banner()) === false);
     for (const [width, height, scale, mobile, suffix] of [[1280, 900, 2, false, ""], [390, 844, 3, true, "-mobile"]]) {
       await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: scale, mobile });
       const fits = async (name) => {
@@ -646,7 +651,7 @@ async function main() {
     rawPng.headers.get("content-type") === "image/png" && !rawPng.headers.get("content-disposition"),
     `${rawPng.headers.get("content-type")} / ${rawPng.headers.get("content-disposition")}`,
   );
-  const rawMd = await fetch(`${ORIGIN}/r/${NAMES.pub}/blob/main/README.md?raw=1`);
+  const rawMd = await fetch(`${ORIGIN}/r/${NAMES.pub}/blob/main/README.md?raw`);
   check("text raw is text/plain", rawMd.headers.get("content-type") === "text/plain; charset=utf-8", rawMd.headers.get("content-type"));
   const notes = await fetch(`${ORIGIN}/r/${NAMES.pub}/blob/main/docs/${encodeURIComponent("my notes #1.md")}`);
   check("file with space and # in its name opens", notes.status === 200 && (await notes.text()).includes("Notes #1"));
@@ -657,7 +662,7 @@ async function main() {
   const pushOld = gitStatus(["push", pushUrl(NAMES.old), "main"], { cwd: WORK });
   check("push to the repo before renaming", pushOld.code === 0, pushOld.out);
   const renameRes = await admin("POST", `/admin/repos/${oldId}/rename`, { name: NAMES.moved });
-  check("rename the repo", renameRes.status === 303 && renameRes.headers.get("location") === `/admin/repos/${oldId}?renamed=1`, `status ${renameRes.status}`);
+  check("rename the repo", renameRes.status === 303 && renameRes.headers.get("location") === `/admin/repos/${oldId}?renamed`, `status ${renameRes.status}`);
   writeFiles({ "renamed.txt": "pushed to the old name\n" });
   commit("Push to the old name after a rename");
   const renamedSha = git(["rev-parse", "main"], { cwd: WORK });

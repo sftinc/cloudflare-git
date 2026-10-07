@@ -131,7 +131,7 @@ async function repoPage(c: Context<AppEnv>, extra: { secret?: { title: string; v
     }
   }
   const hooks = await listWebhooks(c.env.DB, repo.id);
-  return admin(c, `${repo.name} · admin`, <AdminRepo repo={repo} status={s} hooks={hooks} now={Date.now()} restoreDays={restoreDays(c.env)} renamedUrl={c.req.query("renamed") ? cloneUrl(siteOrigin(c), repo.name) : undefined} {...extra} />, status);
+  return admin(c, `${repo.name} · admin`, <AdminRepo repo={repo} status={s} hooks={hooks} now={Date.now()} restoreDays={restoreDays(c.env)} renamedUrl={c.req.query("renamed") !== undefined ? cloneUrl(siteOrigin(c), repo.name) : undefined} {...extra} />, status);
 }
 
 adminRoutes.get("/repos/:id", (c) => repoPage(c));
@@ -173,7 +173,7 @@ adminRoutes.post("/repos/:id/rename", async (c) => {
     if (!String(err).includes("UNIQUE")) throw err; // another repo took the name meanwhile
     return repoPage(c, { error: `A repo named "${name}" already exists.`, name }, 422);
   }
-  if (renamed) return c.redirect(`/admin/repos/${repo.id}?renamed=1`, 303);
+  if (renamed) return c.redirect(`/admin/repos/${repo.id}?renamed`, 303);
   const current = await findRepoById(c.env.DB, repo.id);
   if (!current || current.deleted_at !== null || current.provisioned_at === null) return c.notFound();
   if (current.name === name) return c.redirect(`/admin/repos/${repo.id}`, 303);

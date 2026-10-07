@@ -368,7 +368,7 @@ describe("rename", () => {
     const id = await newRepo("ren-a");
     const r = await rename(id, "ren-b");
     expect(r.status).toBe(303);
-    expect(r.location).toBe(`/admin/repos/${id}?renamed=1`);
+    expect(r.location).toBe(`/admin/repos/${id}?renamed`);
     const row = (await repos.findRepoById(env.DB, id))!;
     expect([row.name, row.storage_name]).toEqual(["ren-b", id]);
     expect(await aliases(id)).toEqual([{ name: "ren-a", repo_id: id, deleted_at: null }]);
@@ -429,7 +429,7 @@ describe("rename", () => {
     await rename(id, "ren-b1"); // elsewhere, after the page for ren-a1 was loaded
     await call("POST", `/admin/repos/${third}/rename`, { name: "ren-a1", take_alias: id }); // takes the old name, on request
     const r = await rename(id, "ren-c1"); // the delayed request
-    expect(r.location).toBe(`/admin/repos/${id}?renamed=1`);
+    expect(r.location).toBe(`/admin/repos/${id}?renamed`);
     expect((await repos.findRepoById(env.DB, id))!.name).toBe("ren-c1");
     expect((await repos.findLiveRepo(env.DB, "ren-a1"))!.id).toBe(third);
     expect((await repos.findLiveAlias(env.DB, "ren-b1"))!.id).toBe(id);
@@ -472,7 +472,7 @@ describe("taking another repo's old name", () => {
     expect(warned.html).toContain('value="ta-x"');
     expect((await repos.findRepoById(env.DB, b))!.name).toBe("ta-b");
     const taken = await rename(b, "ta-x", { take_alias: a });
-    expect([taken.status, taken.location]).toEqual([303, `/admin/repos/${b}?renamed=1`]);
+    expect([taken.status, taken.location]).toEqual([303, `/admin/repos/${b}?renamed`]);
     expect((await repos.findLiveRepo(env.DB, "ta-x"))!.id).toBe(b);
     expect(await repos.findLiveAlias(env.DB, "ta-x")).toBeNull();
   });

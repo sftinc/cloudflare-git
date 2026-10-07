@@ -295,7 +295,7 @@ export function BlobView(props: {
                   {props.markdown && (
                     <nav class="segctl" aria-label="View">
                       <a href={base} aria-current={preview ? "page" : undefined}>Preview</a>
-                      <a href={`${base}?source=1`} aria-current={preview ? undefined : "page"}>Code</a>
+                      <a href={`${base}?source`} aria-current={preview ? undefined : "page"}>Code</a>
                     </nav>
                   )}
                   <a class="btn" href={`${base}?raw`}>Raw</a>

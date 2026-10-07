@@ -231,7 +231,7 @@ describe("files", () => {
     expect((await html("/r/site")).body).not.toContain('class="file-tree"');
   });
   it("numbers lines and counts them in the header", async () => {
-    const r = await html("/r/site/blob/main/README.md?source=1");
+    const r = await html("/r/site/blob/main/README.md?source");
     expect(r.body).toContain('<div class="ln" aria-hidden="true">1\n2\n3\n4\n5</div>');
     expect(r.body).toContain("5 lines · ");
     expect(r.body).toContain('data-copy-url="/r/site/blob/main/README.md?raw"');
@@ -240,8 +240,8 @@ describe("files", () => {
   it("switches markdown between Preview and Code", async () => {
     const preview = await html("/r/site/blob/main/docs/guide.md");
     expect(preview.body).toContain('<a href="/r/site/blob/main/docs/guide.md" aria-current="page">Preview</a>');
-    expect(preview.body).toContain('<a href="/r/site/blob/main/docs/guide.md?source=1">Code</a>');
-    expect((await html("/r/site/blob/main/docs/guide.md?source=1")).body).toContain('<a href="/r/site/blob/main/docs/guide.md?source=1" aria-current="page">Code</a>');
+    expect(preview.body).toContain('<a href="/r/site/blob/main/docs/guide.md?source">Code</a>');
+    expect((await html("/r/site/blob/main/docs/guide.md?source")).body).toContain('<a href="/r/site/blob/main/docs/guide.md?source" aria-current="page">Code</a>');
   });
   it("highlights code", async () => {
     expect((await html("/r/site/blob/main/src/index.ts")).body).toContain("hljs-keyword");
@@ -250,17 +250,17 @@ describe("files", () => {
     const md = await html("/r/site/blob/main/docs/guide.md");
     expect(md.body).toContain("<h2>Guide</h2>");
     expect(md.body).toContain('<img src="/r/site/blob/main/docs/img/d.png?raw" alt="Diagram">');
-    expect((await html("/r/site/blob/main/docs/guide.md?source=1")).body).toContain("## Guide");
+    expect((await html("/r/site/blob/main/docs/guide.md?source")).body).toContain("## Guide");
   });
   it("raw text is text/plain and sandboxed", async () => {
-    const r = await html("/r/site/blob/main/README.md?raw=1");
+    const r = await html("/r/site/blob/main/README.md?raw");
     expect(r.headers.get("content-type")).toBe("text/plain; charset=utf-8");
     expect(r.headers.get("content-security-policy")).toBe("default-src 'none'; sandbox");
     expect(r.headers.get("x-content-type-options")).toBe("nosniff");
     expect(r.body).toContain("<script>alert(1)</script>");
   });
   it("binary files download and are not shown inline", async () => {
-    const raw = await html("/r/site/blob/main/data.bin?raw=1");
+    const raw = await html("/r/site/blob/main/data.bin?raw");
     expect(raw.headers.get("content-type")).toBe("application/octet-stream");
     expect(raw.headers.get("content-disposition")).toBe("attachment; filename=\"data.bin\"; filename*=UTF-8''data.bin");
     const view = (await html("/r/site/blob/main/data.bin")).body;
@@ -268,7 +268,7 @@ describe("files", () => {
     expect(view).toContain('<a href="/r/site/blob/main/data.bin?raw">Download</a>');
   });
   it("binary downloads with non-ASCII names do not crash", async () => {
-    const r = await html("/r/site/blob/main/%E2%9C%93%20data.bin?raw=1");
+    const r = await html("/r/site/blob/main/%E2%9C%93%20data.bin?raw");
     expect(r.status).toBe(200);
     expect(r.headers.get("content-type")).toBe("application/octet-stream");
     expect(r.headers.get("content-disposition")).toContain("filename*=UTF-8''%E2%9C%93%20data.bin");
@@ -312,7 +312,7 @@ describe("old names", () => {
     await rename("al-bar", "al-baz");
     for (const old of ["al-foo", "al-bar"]) {
       expect(await at(`/r/${old}`)).toEqual({ status: 302, location: "/r/al-baz" });
-      expect(await at(`/r/${old}/blob/main/a.txt?raw=1`)).toEqual({ status: 302, location: "/r/al-baz/blob/main/a.txt?raw=1" });
+      expect(await at(`/r/${old}/blob/main/a.txt?raw`)).toEqual({ status: 302, location: "/r/al-baz/blob/main/a.txt?raw" });
       expect((await at(`/r/${old}/tree/main/src`)).location).toBe("/r/al-baz/tree/main/src");
       expect((await at(`/r/${old}/commits/main?page=2`)).location).toBe("/r/al-baz/commits/main?page=2");
     }
