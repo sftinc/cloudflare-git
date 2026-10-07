@@ -11,7 +11,7 @@ import { aliasWarning, DESCRIPTION_MAX, provisionRepo, refreshProvisioning, vali
 import { cloneUrl } from "../render/paths";
 import { siteOrigin } from "../lib/site";
 import { page } from "../views/layout";
-import { ACCESS_LENGTHS, AdminInvites, AdminNewRepo, AdminRepo, AdminRepos, AdminTokens, REDEEM_WINDOWS, type RepoFormValues } from "../views/admin";
+import { ACCESS_LENGTHS, AdminInvites, AdminNewRepo, AdminRepo, AdminRepos, AdminTokens, MAKE_PUBLIC_ACKS, REDEEM_WINDOWS, type RepoFormValues } from "../views/admin";
 
 export const adminRoutes = new Hono<AppEnv>();
 
@@ -174,8 +174,13 @@ adminRoutes.post("/repos/:id/rename", async (c) => {
 adminRoutes.post("/repos/:id/visibility", async (c) => {
   const repo = await activeRepo(c);
   if (!repo) return c.notFound();
-  const b = await c.req.parseBody();
-  await setPublic(c.env.DB, repo.id, b.public === "1", Date.now());
+  const b = await c.req.parseBody({ all: true });
+  const makePublic = b.public === "1";
+  const acks = list(b.ack);
+  if (makePublic && !MAKE_PUBLIC_ACKS.every(([value]) => acks.includes(value))) {
+    return repoPage(c, { error: "Tick all three boxes to make the repo public." }, 422);
+  }
+  await setPublic(c.env.DB, repo.id, makePublic, Date.now());
   return c.redirect(`/admin/repos/${repo.id}`, 303);
 });
 
@@ -183,6 +188,7 @@ adminRoutes.post("/repos/:id/delete", async (c) => {
   const repo = await findRepoById(c.env.DB, c.req.param("id"));
   // A never-created repo is discarded instead, which gives its name back.
   if (!repo || repo.deleted_at !== null || repo.provisioned_at === null) return c.notFound();
+  if ((await c.req.parseBody()).confirm !== "DELETE") return repoPage(c, { error: "Type DELETE to delete the repo." }, 422);
   await setDeleted(c.env.DB, repo.id, true, Date.now());
   return c.redirect("/admin/repos", 303);
 });

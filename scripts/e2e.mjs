@@ -97,7 +97,7 @@ async function createRepo(name) {
   return id;
 }
 async function makePublic(id) {
-  const res = await admin("POST", `/admin/repos/${id}/visibility`, { public: "1" });
+  const res = await admin("POST", `/admin/repos/${id}/visibility`, [["public", "1"], ["ack", "browse"], ["ack", "history"], ["ack", "copies"]]);
   check(`make ${id} public`, res.status === 303, `status ${res.status}`);
 }
 async function createInvite(repoId, label) {
@@ -455,16 +455,55 @@ async function screenshots(ids, inviteForBrowser) {
 
     await send("Network.setExtraHTTPHeaders", { headers: { "Cf-Access-Jwt-Assertion": jwt } });
     await shot("admin-repos", `${ORIGIN}/admin/repos`);
-    await shot("admin-repo", `${ORIGIN}/admin/repos/${ids.pub}`);
     await shot("admin-invites", `${ORIGIN}/admin/invites`);
-    await shot("admin-tokens", `${ORIGIN}/admin/tokens`);
-    await submit(
-      "(() => { const f = document.querySelector('form[action=\"/admin/tokens\"]'); f.querySelector('input[name=name]').value = 'laptop'; f.querySelector('input[name=all]').checked = true; f.submit(); })()",
-      "admin-token-created",
-    );
-    check("browser token form shows the new token", (await evaluate("!!document.querySelector('code#secret')")) === true);
-    await shot("admin-token-refreshed", await evaluate("location.href"));
-    check("a refresh doesn't show the token again", (await evaluate("document.body.innerText")).includes("can't be shown again"));
+    for (const [width, height, scale, mobile, suffix] of [[1280, 900, 2, false, ""], [390, 844, 3, true, "-mobile"]]) {
+      await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: scale, mobile });
+      const fits = async (name) => {
+        if (!mobile) return;
+        const w = await evaluate("document.documentElement.scrollWidth");
+        check(`no horizontal scroll on ${name}`, w <= 390, `scrollWidth ${w}`);
+      };
+      await shot(`admin-repo-hooks${suffix}`, `${ORIGIN}/admin/repos/${ids.pub}`);
+      check(`delivery status is shown${suffix}`, (await evaluate("document.body.innerText")).includes("Last delivery: 200"));
+      await fits("admin repo page");
+      await shot(`admin-repo-private${suffix}`, `${ORIGIN}/admin/repos/${ids.priv}`);
+      await evaluate(`document.querySelector('[data-dialog="make-public"]').click()`);
+      await capture(`make-public-dialog${suffix}`);
+      check(`make public enables only after all three boxes${suffix}`, (await evaluate(`(() => {
+        const f = document.querySelector('#make-public form');
+        const b = f.querySelector('button[type=submit]');
+        const boxes = [...f.querySelectorAll('input[type=checkbox]')];
+        const before = b.disabled;
+        boxes[0].click();
+        boxes[1].click();
+        const partial = b.disabled;
+        boxes[2].click();
+        return before && partial && !b.disabled;
+      })()`)) === true);
+      await capture(`make-public-dialog-ticked${suffix}`);
+      await fits("make-public dialog");
+      await load(`${ORIGIN}/admin/repos/${ids.priv}`);
+      await evaluate(`document.querySelector('[data-dialog="delete-repo"]').click()`);
+      check(`delete enables only for exactly DELETE${suffix}`, (await evaluate(`(() => {
+        const i = document.querySelector('#delete-repo input[name=confirm]');
+        const b = document.querySelector('#delete-repo button[type=submit]');
+        const type = (v) => { i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); return b.disabled; };
+        return b.disabled && type('delete') && type('DELETE ') && !type('DELETE');
+      })()`)) === true);
+      await capture(`delete-dialog${suffix}`);
+      await fits("delete dialog");
+      await shot(`admin-tokens${suffix}`, `${ORIGIN}/admin/tokens`);
+      await submit(
+        `(() => { const f = document.querySelector('form[action="/admin/tokens"]'); f.querySelector('input[name=name]').value = 'browser${suffix}'; f.querySelector('input[name=all]').checked = true; f.submit(); })()`,
+        `admin-token-created${suffix}`,
+      );
+      check(`browser token form shows the new token${suffix}`, (await evaluate("!!document.querySelector('code#secret')")) === true);
+      await fits("token created page");
+      await shot(`admin-token-refreshed${suffix}`, await evaluate("location.href"));
+      check(`a refresh doesn't show the token again${suffix}`, (await evaluate("document.body.innerText")).includes("can't be shown again"));
+      await fits("token refreshed page");
+    }
+    await desktop();
     await send("Network.setExtraHTTPHeaders", { headers: {} });
 
     check("no script errors or CSP violations in the browser", errors.length === 0, errors.join(" | "));
@@ -642,7 +681,7 @@ async function main() {
 
   // 14. Screenshots
   const browserInvite = await createInvite(ids.priv, "Alex");
-  const files = await screenshots({ pub: ids.pub }, browserInvite);
+  const files = await screenshots(ids, browserInvite);
   return files;
 }
 

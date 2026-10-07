@@ -147,6 +147,14 @@ a.node:hover { background: var(--code-bg); text-decoration: none; }
 button.danger { color: var(--bad); background: var(--surface); }
 button.danger:hover { color: #fff; background: var(--bad); border-color: var(--bad); }
 button.link { background: none; border: 0; color: var(--accent); padding: 0; font-weight: 500; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+dialog.confirm { width: min(480px, calc(100% - 32px)); padding: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); box-shadow: 0 8px 24px var(--shadow); }
+dialog.confirm::backdrop { background: rgba(0, 0, 0, .45); }
+dialog.confirm form.stack { padding: 20px; }
+dialog.confirm h2 { margin: 0; font-size: 18px; overflow-wrap: anywhere; }
+form.stack label.check { flex-wrap: nowrap; align-items: flex-start; gap: 8px; font-weight: 400; font-size: 14px; }
+form.stack label.check input { margin-top: 3px; flex: none; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
 .toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 20px; }
 .toolbar-link { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
@@ -305,6 +313,7 @@ fieldset:has(input[name=all]:checked) label:has(input[name=repos]) { opacity: .4
   .site-actions .theme-cycle { display: inline-flex; }
   .box > .row > form:last-child { flex-basis: 100%; }
   .box > .row > form:last-child button { width: 100%; }
+  .box > .row > button[data-dialog] { flex-basis: 100%; }
   .hook code { flex-basis: 100%; }
   .box > .hook > form { flex-basis: auto; margin-left: auto; }
   .box > .hook > form button { width: auto; }

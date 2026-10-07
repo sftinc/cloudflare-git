@@ -21,9 +21,11 @@ document.addEventListener("submit", (event) => {
   const buttons = event.target.querySelectorAll("button, input[type=submit]");
   setTimeout(() => buttons.forEach((b) => (b.disabled = true)));
 });
-// Back/forward cache restores the page as it was: re-enable.
+// Back/forward cache restores the page as it was: re-enable, then re-check confirm dialogs.
 window.addEventListener("pageshow", (event) => {
-  if (event.persisted) document.querySelectorAll("button:disabled, input[type=submit]:disabled").forEach((b) => (b.disabled = false));
+  if (!event.persisted) return;
+  document.querySelectorAll("button:disabled, input[type=submit]:disabled").forEach((b) => (b.disabled = false));
+  document.querySelectorAll("form[data-confirm]").forEach(updateConfirm);
 });
 
 // Characters-remaining hints: <input maxlength data-remaining="hint-id">.
@@ -37,3 +39,21 @@ document.addEventListener("input", (event) => {
 const openDropdowns = () => document.querySelectorAll("details.menu[open], details.branches[open]");
 document.addEventListener("click", (event) => openDropdowns().forEach((d) => { if (!d.contains(event.target)) d.open = false; }));
 document.addEventListener("keydown", (event) => { if (event.key === "Escape") openDropdowns().forEach((d) => (d.open = false)); });
+
+// Confirm dialogs: <button data-dialog="id"> opens <dialog id>, [data-close] closes it. In <form data-confirm>
+// the submit button enables once every checkbox is ticked and each [data-must] field holds exactly its value.
+function updateConfirm(form) {
+  const ready =
+    [...form.querySelectorAll("input[type=checkbox]")].every((b) => b.checked) &&
+    [...form.querySelectorAll("[data-must]")].every((i) => i.value === i.dataset.must);
+  form.querySelector("button[type=submit]").disabled = !ready;
+}
+document.addEventListener("click", (event) => {
+  const opener = event.target.closest("[data-dialog]");
+  if (opener) document.getElementById(opener.dataset.dialog)?.showModal();
+  if (event.target.closest("[data-close]")) event.target.closest("dialog")?.close();
+});
+document.addEventListener("input", (event) => {
+  const form = event.target.closest?.("form[data-confirm]");
+  if (form) updateConfirm(form);
+});

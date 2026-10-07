@@ -173,6 +173,13 @@ export function AdminNewRepo(props: { kind: "create" | "import"; error?: string;
   );
 }
 
+/** Spec §9: the make-public dialog's checkboxes; the server requires every value. */
+export const MAKE_PUBLIC_ACKS: [string, string][] = [
+  ["browse", "Anyone can browse and clone it without signing in."],
+  ["history", "Every branch, tag and past commit becomes visible, including anything ever committed and later removed (keys, passwords)."],
+  ["copies", "Making it private again won't undo copies people or search engines have already made."],
+];
+
 export function AdminRepo(props: {
   repo: RepoRow; status: "ready" | "pending" | "missing"; hooks: WebhookRow[]; now: number;
   secret?: { title: string; value: string }; error?: string; description?: string; name?: string; renamedUrl?: string; takeAlias?: string;
@@ -282,15 +289,43 @@ export function AdminRepo(props: {
               </div>
               {r.public_at !== null
                 ? <Post action={`/admin/repos/${r.id}/visibility`} name="public" value="0" label="Make private" class="danger" />
-                : <Post action={`/admin/repos/${r.id}/visibility`} name="public" value="1" label="Make public" class="danger" />}
+                : <button type="button" class="danger" data-dialog="make-public">Make public</button>}
             </div>
             <div class="row">
               <div class="row-text"><strong>Delete this repo</strong><span>You can restore it later from the Repos page.</span></div>
-              <Post action={`/admin/repos/${r.id}/delete`} label="Delete this repo" class="danger" />
+              <button type="button" class="danger" data-dialog="delete-repo">Delete this repo</button>
             </div>
           </>
         )}
       </div>
+      {live && r.public_at === null && (
+        <dialog id="make-public" class="confirm" aria-labelledby="make-public-title">
+          <form method="post" action={`/admin/repos/${r.id}/visibility`} class="stack" data-confirm>
+            <h2 id="make-public-title">Make "{r.name}" public?</h2>
+            <input type="hidden" name="public" value="1" />
+            {MAKE_PUBLIC_ACKS.map(([value, text]) => (
+              <label class="check"><input type="checkbox" name="ack" value={value} required /> {text}</label>
+            ))}
+            <div class="dialog-actions">
+              <button type="button" data-close>Cancel</button>
+              <button type="submit" class="danger" disabled>Make public</button>
+            </div>
+          </form>
+        </dialog>
+      )}
+      {live && (
+        <dialog id="delete-repo" class="confirm" aria-labelledby="delete-repo-title">
+          <form method="post" action={`/admin/repos/${r.id}/delete`} class="stack" data-confirm>
+            <h2 id="delete-repo-title">Delete repo "{r.name}"?</h2>
+            <p>Its pages and clone URL will return 404 and its webhooks stop. You can restore it from the admin list.</p>
+            <label>Type DELETE to confirm<input type="text" name="confirm" autocomplete="off" required data-must="DELETE" /></label>
+            <div class="dialog-actions">
+              <button type="button" data-close>Cancel</button>
+              <button type="submit" class="danger" disabled>Delete</button>
+            </div>
+          </form>
+        </dialog>
+      )}
     </>
   );
 }

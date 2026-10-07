@@ -14,6 +14,8 @@ import { ownerEnv, ownerToken } from "./helpers/jwt";
 let fake: FakeArtifacts;
 let jwt: string;
 const secretOf = (html: string) => /<code id="secret">([^<]+)<\/code>/.exec(html)?.[1];
+const DELETE_FORM = { confirm: "DELETE" };
+const MAKE_PUBLIC_FORM = { public: "1", ack: ["browse", "history", "copies"] };
 
 beforeEach(async () => {
   clearArtifactsCaches();
@@ -132,9 +134,9 @@ describe("repos", () => {
   });
   it("toggles visibility, deletes and restores", async () => {
     const id = (await call("POST", "/admin/repos", { name: "vis" })).location!.split("/").pop()!;
-    await call("POST", `/admin/repos/${id}/visibility`, { public: "1" });
+    await call("POST", `/admin/repos/${id}/visibility`, MAKE_PUBLIC_FORM);
     expect((await repos.findRepoById(env.DB, id))!.public_at).not.toBeNull();
-    await call("POST", `/admin/repos/${id}/delete`, {});
+    await call("POST", `/admin/repos/${id}/delete`, DELETE_FORM);
     expect((await repos.findRepoById(env.DB, id))!.deleted_at).not.toBeNull();
     const again = await call("POST", "/admin/repos", { name: "vis" });
     expect(again.html).toContain(`/admin/repos/${id}/restore`);
@@ -181,14 +183,14 @@ describe("repo settings page", () => {
     expect(html).toContain("Make public");
     expect(html).toContain("Delete this repo");
     expect(html).not.toContain("git remote add"); // clone instructions are gone
-    await call("POST", `/admin/repos/${id}/visibility`, { public: "1" });
+    await call("POST", `/admin/repos/${id}/visibility`, MAKE_PUBLIC_FORM);
     const pub = (await call("GET", `/admin/repos/${id}`)).html;
     expect(pub).toContain("This repo is public");
     expect(pub).toContain("Make private");
   });
   it("shows only Restore for a deleted repo", async () => {
     const id = await newRepo("gone");
-    await call("POST", `/admin/repos/${id}/delete`, {});
+    await call("POST", `/admin/repos/${id}/delete`, DELETE_FORM);
     const html = (await call("GET", `/admin/repos/${id}`)).html;
     expect(html).toContain("Restore this repo");
     for (const h of ["General", "Webhooks", "Direct push"]) expect(html).not.toContain(`>${h}</h2>`);
@@ -223,7 +225,7 @@ describe("repo settings page", () => {
   });
   it("won't change a deleted repo's description", async () => {
     const id = await newRepo("descr-gone");
-    await call("POST", `/admin/repos/${id}/delete`, {});
+    await call("POST", `/admin/repos/${id}/delete`, DELETE_FORM);
     expect((await call("POST", `/admin/repos/${id}/description`, { description: "nope" })).status).toBe(404);
     expect((await repos.findRepoById(env.DB, id))!.description).toBeNull();
   });
@@ -348,7 +350,7 @@ describe("rename", () => {
     const id = await newRepo("ren-t1");
     const other = await newRepo("ren-t2");
     const gone = await newRepo("ren-t3");
-    await call("POST", `/admin/repos/${gone}/delete`, {});
+    await call("POST", `/admin/repos/${gone}/delete`, DELETE_FORM);
     const live = await rename(id, "ren-t2");
     expect(live.status).toBe(422);
     expect(live.html).toContain("A repo named &quot;ren-t2&quot; already exists.");
@@ -360,7 +362,7 @@ describe("rename", () => {
   });
   it("404s for a deleted repo", async () => {
     const id = await newRepo("ren-del");
-    await call("POST", `/admin/repos/${id}/delete`, {});
+    await call("POST", `/admin/repos/${id}/delete`, DELETE_FORM);
     expect((await rename(id, "ren-del2")).status).toBe(404);
     expect((await repos.findRepoById(env.DB, id))!.name).toBe("ren-del");
   });
@@ -386,7 +388,7 @@ describe("rename", () => {
   });
   it("a rename racing a delete changes nothing", async () => {
     const id = await newRepo("ren-race");
-    await call("POST", `/admin/repos/${id}/delete`, {});
+    await call("POST", `/admin/repos/${id}/delete`, DELETE_FORM);
     expect(await repos.renameRepo(env.DB, id, "ren-race2", 5)).toBe(false);
     expect((await repos.findRepoById(env.DB, id))!.name).toBe("ren-race");
     expect(await aliases(id)).toEqual([]);
@@ -614,6 +616,55 @@ describe("refreshing after a create", () => {
       expect(page.status).toBe(200);
       expect(page.html).not.toContain("was created.");
     }
+  });
+});
+
+describe("confirming delete and make-public", () => {
+  const newRepo = async (name: string) => (await call("POST", "/admin/repos", { name })).location!.split("/").pop()!;
+  it("the settings page opens dialogs whose submit starts disabled", async () => {
+    const id = await newRepo("cf-page");
+    const html = (await call("GET", `/admin/repos/${id}`)).html;
+    expect(html).toContain('<button type="button" class="danger" data-dialog="make-public">Make public</button>');
+    expect(html).toContain('<button type="button" class="danger" data-dialog="delete-repo">Delete this repo</button>');
+    expect(html).toContain('<dialog id="delete-repo"');
+    expect(html).toContain("Delete repo &quot;cf-page&quot;?");
+    expect(html).toContain("Its pages and clone URL will return 404 and its webhooks stop. You can restore it from the admin list.");
+    expect(html).toContain('data-must="DELETE"');
+    expect(html).toContain('<dialog id="make-public"');
+    expect(html.match(/name="ack"/g)).toHaveLength(3);
+    expect(html).toContain("Every branch, tag and past commit becomes visible, including anything ever committed and later removed (keys, passwords).");
+    expect(html.match(/<button type="submit" class="danger" disabled="">/g)).toHaveLength(2);
+    await call("POST", `/admin/repos/${id}/visibility`, MAKE_PUBLIC_FORM);
+    const pub = (await call("GET", `/admin/repos/${id}`)).html;
+    expect(pub).not.toContain('<dialog id="make-public"'); // making private stays one click
+    expect(pub).toContain('value="0"');
+  });
+  it("delete needs confirm=DELETE exactly", async () => {
+    const id = await newRepo("cf-del");
+    for (const form of [{}, { confirm: "delete" }, { confirm: "DELETE " }] as Record<string, string>[]) {
+      const r = await call("POST", `/admin/repos/${id}/delete`, form);
+      expect(r.status).toBe(422);
+      expect(r.html).toContain("Type DELETE to delete the repo.");
+    }
+    expect((await repos.findRepoById(env.DB, id))!.deleted_at).toBeNull();
+    expect((await call("POST", `/admin/repos/${id}/delete`, DELETE_FORM)).status).toBe(303);
+    expect((await repos.findRepoById(env.DB, id))!.deleted_at).not.toBeNull();
+  });
+  it("make public needs all three acknowledgements; make private and restore need none", async () => {
+    const id = await newRepo("cf-pub");
+    for (const ack of [[], ["browse", "history"], ["browse", "history", "history"]]) {
+      const r = await call("POST", `/admin/repos/${id}/visibility`, { public: "1", ack });
+      expect(r.status).toBe(422);
+      expect(r.html).toContain("Tick all three boxes to make the repo public.");
+    }
+    expect((await repos.findRepoById(env.DB, id))!.public_at).toBeNull();
+    expect((await call("POST", `/admin/repos/${id}/visibility`, MAKE_PUBLIC_FORM)).status).toBe(303);
+    expect((await repos.findRepoById(env.DB, id))!.public_at).not.toBeNull();
+    expect((await call("POST", `/admin/repos/${id}/visibility`, { public: "0" })).status).toBe(303);
+    expect((await repos.findRepoById(env.DB, id))!.public_at).toBeNull();
+    await call("POST", `/admin/repos/${id}/delete`, DELETE_FORM);
+    expect((await call("POST", `/admin/repos/${id}/restore`, {})).status).toBe(303);
+    expect((await repos.findRepoById(env.DB, id))!.deleted_at).toBeNull();
   });
 });
 
