@@ -1,7 +1,7 @@
 import { Hono, type Context } from "hono";
 import type { AppEnv } from "../index";
 import { verifyAccessJwt } from "../auth/access-jwt";
-import { findRepoById, findRepoByName, listLiveRepos, listReposForAdmin, renameRepo, setDeleted, setDescription, setPublic } from "../db/repos";
+import { findRepoById, findRepoByName, listLiveRepos, listReposForAdmin, renameRepo, retireRepo, setDeleted, setDescription, setPublic } from "../db/repos";
 import { createInvite, deleteInvite, inviteStatus, listInvites, revokeInvite } from "../db/invites";
 import { createPushToken, deletePushToken, listPushTokens, revokePushToken } from "../db/tokens";
 import { createWebhook, deleteWebhook, listWebhooks } from "../db/webhooks";
@@ -43,7 +43,7 @@ async function reposPage(c: Context<AppEnv>) {
         if (s === "ready") r.provisioned_at = now;
         if (s === "pending") pending.add(r.id);
       } catch (err) {
-        // One bad row must not lock the owner out of the list; it shows as "Not created".
+        // One bad row must not lock the owner out of the list; it shows as "Import failed".
         console.error(JSON.stringify({ msg: "provisioning check failed", repo: r.name, error: String(err) }));
       }
     }
@@ -79,7 +79,7 @@ adminRoutes.post("/import", async (c) => {
 
 async function repoPage(c: Context<AppEnv>, extra: { secret?: { title: string; value: string }; error?: string; description?: string; name?: string } = {}, status = 200) {
   const repo = await findRepoById(c.env.DB, c.req.param("id")!);
-  if (!repo) return c.notFound();
+  if (!repo || (repo.provisioned_at === null && repo.deleted_at !== null)) return c.notFound(); // retired: a failed create, given up
   let s: ProvisionStatus = "ready";
   if (repo.provisioned_at === null && repo.deleted_at === null) {
     s = await refreshProvisioning(c.env.DB, c.env.ARTIFACTS, repo, Date.now());
@@ -128,13 +128,29 @@ adminRoutes.post("/repos/:id/visibility", async (c) => {
 });
 
 adminRoutes.post("/repos/:id/delete", async (c) => {
-  await setDeleted(c.env.DB, c.req.param("id"), true, Date.now());
+  const repo = await findRepoById(c.env.DB, c.req.param("id"));
+  // A never-created repo is discarded instead, which gives its name back.
+  if (!repo || repo.deleted_at !== null || repo.provisioned_at === null) return c.notFound();
+  await setDeleted(c.env.DB, repo.id, true, Date.now());
   return c.redirect("/admin/repos", 303);
 });
 
 adminRoutes.post("/repos/:id/restore", async (c) => {
-  await setDeleted(c.env.DB, c.req.param("id"), false, Date.now());
-  return c.redirect(`/admin/repos/${c.req.param("id")}`, 303);
+  const repo = await findRepoById(c.env.DB, c.req.param("id"));
+  if (!repo || repo.deleted_at === null || repo.provisioned_at === null) return c.notFound(); // retired rows can't come back
+  await setDeleted(c.env.DB, repo.id, false, Date.now());
+  return c.redirect(`/admin/repos/${repo.id}`, 303);
+});
+
+/** Spec §2: an import that failed in the background. Checks again first: it may have finished meanwhile. */
+adminRoutes.post("/repos/:id/discard", async (c) => {
+  const repo = await findRepoById(c.env.DB, c.req.param("id"));
+  if (!repo || repo.deleted_at !== null || repo.provisioned_at !== null) return c.notFound();
+  const status = await refreshProvisioning(c.env.DB, c.env.ARTIFACTS, repo, Date.now());
+  if (status === "ready") return c.redirect(`/admin/repos/${repo.id}`, 303);
+  if (status === "pending") return repoPage(c, { error: "It's still importing." }, 422);
+  await retireRepo(c.env.DB, repo.id, Date.now());
+  return c.redirect("/admin/repos", 303);
 });
 
 function webhookUrlError(raw: string): string | null {

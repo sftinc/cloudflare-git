@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:test";
 import { provisionRepo, refreshProvisioning, validateRepoName } from "../src/provision";
 import * as repos from "../src/db/repos";
@@ -6,6 +6,10 @@ import { FakeArtifacts } from "./helpers/fake-artifacts";
 
 const art = (f: FakeArtifacts) => f as unknown as Artifacts;
 const create = (name: string) => ({ kind: "create" as const, name, description: "", defaultBranch: "main" });
+afterEach(() => vi.restoreAllMocks());
+const quiet = () => vi.spyOn(console, "warn").mockImplementation(() => {});
+const imp = (name: string, opts: { url?: string; branch?: string; description?: string } = {}) =>
+  ({ kind: "import" as const, name, description: opts.description ?? "", url: opts.url ?? "https://github.com/a/b", branch: opts.branch ?? "" });
 
 describe("validateRepoName", () => {
   it.each([["site", null], ["a", "x"], ["Site", "x"], ["-site", "x"], ["admin", null], ["invite", null], ["static", null], ["my.repo", "x"], ["a".repeat(64), "x"]])(
@@ -24,23 +28,29 @@ describe("provisionRepo", () => {
     expect((await repos.findLiveRepo(env.DB, "p1"))).not.toBeNull();
   });
 
-  it("a failed create leaves an unprovisioned row; resubmitting reuses it", async () => {
+  it("a failed create gives its name back; resubmitting inserts a fresh row", async () => {
+    quiet();
     const f = new FakeArtifacts();
     f.failNext = { method: "create", code: "INTERNAL_ERROR" };
-    const first = await provisionRepo(env.DB, art(f), create("p2"), 1);
-    expect(first.ok).toBe(false);
-    const row = (await repos.findRepoByName(env.DB, "p2"))!;
-    expect(row.provisioned_at).toBeNull();
-    const second = await provisionRepo(env.DB, art(f), create("p2"), 2);
-    expect(second.ok && second.repo.id).toBe(row.id);
+    const first = await provisionRepo(env.DB, art(f), { ...create("p2"), description: "first try" }, 1);
+    expect(!first.ok && first.error).toBe("Artifacts couldn't create the repo (INTERNAL_ERROR). Try again.");
+    expect(await repos.findRepoByName(env.DB, "p2")).toBeNull();
+    const old = (await env.DB.prepare("SELECT * FROM repos WHERE description = 'first try'").first<repos.RepoRow>())!;
+    expect([old.name, old.deleted_at, old.provisioned_at]).toEqual([`~${old.id}`, 1, null]);
+    const second = await provisionRepo(env.DB, art(f), { ...create("p2"), description: "second try" }, 2);
+    if (!second.ok) throw new Error(second.error);
+    expect(second.repo.id).not.toBe(old.id);
+    expect(second.repo.storage_name).not.toBe(old.storage_name);
+    expect(second.repo.description).toBe("second try");
   });
 
-  it("treats ALREADY_EXISTS on resubmit as success", async () => {
+  it("ALREADY_EXISTS from Artifacts is a failure, not a success", async () => {
+    quiet();
     const f = new FakeArtifacts();
-    const row = await repos.insertRepo(env.DB, { name: "p3", description: null }, 1); // earlier attempt reached D1 only
-    await f.create(row.storage_name); // ...and Artifacts
-    const r = await provisionRepo(env.DB, art(f), create("p3"), 2);
-    expect(r.ok && r.status).toBe("ready");
+    f.failNext = { method: "create", code: "ALREADY_EXISTS" };
+    const r = await provisionRepo(env.DB, art(f), create("p3"), 1);
+    expect(r.ok).toBe(false);
+    expect(await repos.findRepoByName(env.DB, "p3")).toBeNull();
   });
 
   it("stores a new repo under its id, so an old repo's storage name doesn't block the name", async () => {
@@ -65,17 +75,6 @@ describe("provisionRepo", () => {
     expect(!del.ok && del.restoreId).toBe(row.id);
   });
 
-  it("rejects a name whose deleted row was never provisioned", async () => {
-    const f = new FakeArtifacts();
-    f.failNext = { method: "create", code: "INTERNAL_ERROR" };
-    await provisionRepo(env.DB, art(f), create("p7"), 1);
-    const row = (await repos.findRepoByName(env.DB, "p7"))!;
-    await repos.setDeleted(env.DB, row.id, true, 2);
-    const r = await provisionRepo(env.DB, art(f), create("p7"), 3);
-    expect(!r.ok && r.restoreId).toBe(row.id);
-    expect(f.repos.has("p7")).toBe(false);
-  });
-
   it("refuses import URLs with credentials and clears them", async () => {
     const r = await provisionRepo(env.DB, art(new FakeArtifacts()), { kind: "import", name: "p5", description: "", url: "https://user:tok@github.com/a/b", branch: "" }, 1);
     expect(!r.ok && r.clearUrl).toBe(true);
@@ -90,5 +89,44 @@ describe("provisionRepo", () => {
     f.finishImport(row.storage_name);
     expect(await refreshProvisioning(env.DB, art(f), row, 2)).toBe("ready");
     expect((await repos.findLiveRepo(env.DB, "p6"))).not.toBeNull();
+  });
+
+  it("a pending import holds its name", async () => {
+    const f = new FakeArtifacts();
+    const r = await provisionRepo(env.DB, art(f), imp("p8"), 1);
+    expect(r.ok && r.status).toBe("pending");
+    const again = await provisionRepo(env.DB, art(f), create("p8"), 2);
+    expect(!again.ok && again.error).toBe('"p8" is still being imported.');
+  });
+
+  it("a refresh while a create is still running changes nothing", async () => {
+    const row = await repos.insertRepo(env.DB, { name: "p12", description: null }, 1); // inserted; Artifacts not called yet
+    expect(await refreshProvisioning(env.DB, art(new FakeArtifacts()), row, 2)).toBe("missing");
+    expect(await repos.findRepoById(env.DB, row.id)).toEqual(row);
+  });
+
+  it("a retry after Artifacts created the first attempt never reuses its storage", async () => {
+    quiet();
+    const f = new FakeArtifacts();
+    f.failNext = { method: "get", code: "INTERNAL_ERROR" }; // the import started, then the check failed
+    const one = "https://example.com/one.git";
+    expect((await provisionRepo(env.DB, art(f), imp("p9", { url: one, description: one }), 1)).ok).toBe(false);
+    const first = (await env.DB.prepare("SELECT * FROM repos WHERE description = ?").bind(one).first<repos.RepoRow>())!;
+    expect(f.repos.has(first.storage_name)).toBe(true); // left behind in Artifacts
+    const second = await provisionRepo(env.DB, art(f), imp("p9", { url: "https://example.com/two.git" }), 2);
+    if (!second.ok) throw new Error(second.error);
+    expect(second.repo.id).not.toBe(first.id);
+    expect(second.repo.storage_name).not.toBe(first.storage_name);
+  });
+
+  it("names the branch when an import with a branch finds nothing", async () => {
+    quiet();
+    const f = new FakeArtifacts();
+    f.failNext = { method: "import", code: "NOT_FOUND" };
+    const withBranch = await provisionRepo(env.DB, art(f), imp("p10", { branch: "dev" }), 1);
+    expect(!withBranch.ok && withBranch.error).toBe('Nothing was found at that URL, or it has no branch "dev".');
+    f.failNext = { method: "import", code: "NOT_FOUND" };
+    const without = await provisionRepo(env.DB, art(f), imp("p11"), 1);
+    expect(!without.ok && without.error).toBe("No repository was found at that URL.");
   });
 });

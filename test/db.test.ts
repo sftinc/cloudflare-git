@@ -33,6 +33,21 @@ describe("repos", () => {
     await repos.setDeleted(db, r.id, true, T);
     await expect(repos.insertRepo(db, { name: "taken", description: null }, T)).rejects.toThrow();
   });
+  it("a retired row gives its name back and is never marked provisioned", async () => {
+    const r = await repos.insertRepo(db, { name: "retire-me", description: null }, T);
+    expect(await repos.retireRepo(db, r.id, T)).toBe(true);
+    expect(await repos.retireRepo(db, r.id, T)).toBe(false);
+    await repos.markProvisioned(db, r.id, T);
+    const row = (await repos.findRepoById(db, r.id))!;
+    expect([row.name, row.deleted_at, row.provisioned_at]).toEqual([`~${r.id}`, T, null]);
+    expect((await repos.listReposForAdmin(db)).map((x) => x.id)).not.toContain(r.id);
+    expect((await repos.insertRepo(db, { name: "retire-me", description: null }, T)).name).toBe("retire-me");
+  });
+  it("retiring leaves a created repo alone", async () => {
+    const r = await liveRepo("retire-not");
+    expect(await repos.retireRepo(db, r.id, T)).toBe(false);
+    expect((await repos.findRepoById(db, r.id))!.name).toBe("retire-not");
+  });
 });
 
 describe("invites", () => {

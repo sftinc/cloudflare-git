@@ -1,5 +1,5 @@
 import { artifactsErrorCode } from "./artifacts";
-import { findRepoByName, insertRepo, markProvisioned, type RepoRow } from "./db/repos";
+import { findRepoByName, insertRepo, markProvisioned, retireRepo, type RepoRow } from "./db/repos";
 
 export type ProvisionInput =
   | { kind: "create"; name: string; description: string; defaultBranch: string }
@@ -46,17 +46,23 @@ function checkInput(input: ProvisionInput): ProvisionResult | null {
   return null;
 }
 
-/** Spec §10: D1 row first, then Artifacts; a failed attempt is retried by resubmitting the same name. */
+/**
+ * Spec §2: the D1 row first, then Artifacts. A row with provisioned_at NULL that is not deleted is a
+ * pending create or import and holds its name. On any outcome but "ready" or "pending" this request
+ * retires the row, giving the name back; resubmitting is the retry, with a fresh row and fresh storage.
+ */
 export async function provisionRepo(db: D1Database, art: Artifacts, input: ProvisionInput, now: number): Promise<ProvisionResult> {
   const invalid = checkInput(input);
   if (invalid) return invalid;
   const existing = await findRepoByName(db, input.name);
-  if (existing && (existing.provisioned_at !== null || existing.deleted_at !== null)) {
-    return existing.deleted_at !== null
-      ? { ok: false, error: `A deleted repo named "${input.name}" exists. Restore it instead.`, restoreId: existing.id }
-      : { ok: false, error: `A repo named "${input.name}" already exists.` };
+  if (existing) {
+    if (existing.deleted_at !== null) return { ok: false, error: `A deleted repo named "${input.name}" exists. Restore it instead.`, restoreId: existing.id };
+    if (existing.provisioned_at === null) return { ok: false, error: `"${input.name}" is still being imported.` };
+    return { ok: false, error: `A repo named "${input.name}" already exists.` };
   }
-  const repo = existing ?? (await insertRepo(db, { name: input.name, description: input.description || null }, now));
+  const repo = await insertRepo(db, { name: input.name, description: input.description || null }, now);
+  let status: ProvisionStatus = "missing";
+  let code: string | null = null;
   try {
     if (input.kind === "create") {
       await art.create(repo.storage_name, { setDefaultBranch: input.defaultBranch || "main", ...(input.description ? { description: input.description } : {}) });
@@ -66,14 +72,19 @@ export async function provisionRepo(db: D1Database, art: Artifacts, input: Provi
         target: { name: repo.storage_name, ...(input.description ? { opts: { description: input.description } } : {}) },
       });
     }
+    status = await refreshProvisioning(db, art, repo, now);
   } catch (err) {
-    const code = artifactsErrorCode(err);
-    if (code !== "ALREADY_EXISTS") {
-      console.warn(JSON.stringify({ msg: "provision failed", repo: input.name, kind: input.kind, code, error: String(err) }));
-      return { ok: false, error: (code && MESSAGES[code]) ?? `Artifacts couldn't ${input.kind} the repo (${code ?? "unknown error"}). Try again.` };
-    }
+    code = artifactsErrorCode(err);
+    console.warn(JSON.stringify({ msg: "provision failed", repo: input.name, kind: input.kind, code, error: String(err) }));
   }
-  return { ok: true, repo, status: await refreshProvisioning(db, art, repo, now) };
+  if (status !== "missing") return { ok: true, repo, status };
+  // Only this request retires the row: a page refresh can't tell a failed create from one still running.
+  await retireRepo(db, repo.id, now);
+  const error =
+    input.kind === "import" && input.branch && code === "NOT_FOUND"
+      ? `Nothing was found at that URL, or it has no branch "${input.branch}".`
+      : ((code && MESSAGES[code]) ?? `Artifacts couldn't ${input.kind} the repo (${code ?? "unknown error"}). Try again.`);
+  return { ok: false, error };
 }
 
 export async function refreshProvisioning(db: D1Database, art: Artifacts, repo: RepoRow, now: number): Promise<ProvisionStatus> {

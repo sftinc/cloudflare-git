@@ -86,7 +86,7 @@ describe("repos", () => {
     expect(r.html).toContain('value="flaky"');
     expect(r.html).toContain('value="keep me"');
     expect(r.html).toContain('value="trunk"');
-    expect((await call("GET", "/admin/repos")).html).toContain("Not created");
+    expect((await call("GET", "/admin/repos")).html).not.toContain("<strong>flaky</strong>");
     expect((await call("POST", "/admin/repos", { name: "flaky", defaultBranch: "trunk" })).status).toBe(303);
   });
   it("sets visibility from the form, private unless public is chosen", async () => {
@@ -158,7 +158,7 @@ describe("repos", () => {
     const page = await call("GET", "/admin/repos");
     expect(page.status).toBe(200);
     expect(page.html).toContain(`/admin/repos/${r.id}`);
-    expect(page.html).toContain("Not created");
+    expect(page.html).toContain("Import failed");
   });
 });
 
@@ -186,12 +186,14 @@ describe("repo settings page", () => {
     expect(html).toContain("Restore this repo");
     for (const h of ["General", "Webhooks", "Direct push"]) expect(html).not.toContain(`>${h}</h2>`);
   });
-  it("shows only Delete for a repo that was never created", async () => {
+  it("offers only Discard for a repo that was never created, and won't delete it", async () => {
     const r = await repos.insertRepo(env.DB, { name: "half", description: null }, Date.now());
-    fake.failNext = { method: "get", code: "NOT_FOUND" };
     const html = (await call("GET", `/admin/repos/${r.id}`)).html;
-    expect(html).toContain("Delete this repo");
+    expect(html).toContain("Discard this import");
+    expect(html).not.toContain("Delete this repo");
     for (const h of ["General", "Webhooks", "Direct push"]) expect(html).not.toContain(`>${h}</h2>`);
+    expect((await call("POST", `/admin/repos/${r.id}/delete`, {})).status).toBe(404);
+    expect((await repos.findRepoById(env.DB, r.id))!.deleted_at).toBeNull();
   });
   it("saves, clears and limits the description", async () => {
     const id = await newRepo("descr");
@@ -242,6 +244,63 @@ describe("repo settings page", () => {
     expect(html).toContain("Last delivery failed: timeout, 3 minutes ago");
     expect(html).toContain("Last delivery failed: 500, 3 minutes ago");
     expect(html).toContain("No deliveries yet");
+  });
+});
+
+describe("failed creates and imports", () => {
+  it("a failed create gives its name back and stays out of both lists", async () => {
+    fake.failNext = { method: "create", code: "INTERNAL_ERROR" };
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const r = await call("POST", "/admin/repos", { name: "fc-a", description: "fc-a first" });
+    expect(r.status).toBe(422);
+    expect(r.html).toContain('value="fc-a first"');
+    const row = (await env.DB.prepare("SELECT * FROM repos WHERE description = 'fc-a first'").first<repos.RepoRow>())!;
+    expect([row.name, row.deleted_at !== null, row.provisioned_at]).toEqual([`~${row.id}`, true, null]);
+    expect((await call("GET", "/admin/repos")).html).not.toContain(row.id);
+    expect((await call("GET", `/admin/repos/${row.id}`)).status).toBe(404);
+    expect((await call("POST", `/admin/repos/${row.id}/restore`, {})).status).toBe(404);
+    expect((await call("POST", "/admin/repos", { name: "fc-a", description: "fc-a second" })).status).toBe(303);
+    const fresh = (await repos.findRepoByName(env.DB, "fc-a"))!;
+    expect([fresh.id === row.id, fresh.storage_name === row.storage_name, fresh.description]).toEqual([false, false, "fc-a second"]);
+  });
+  it("a refresh while a create is still running changes nothing", async () => {
+    const row = await repos.insertRepo(env.DB, { name: "fc-running", description: null }, Date.now());
+    expect((await call("GET", "/admin/repos")).html).toContain(`/admin/repos/${row.id}`);
+    expect((await call("GET", `/admin/repos/${row.id}`)).status).toBe(200);
+    expect(await repos.findRepoById(env.DB, row.id)).toEqual(row);
+  });
+  it("Discard gives a failed import's name back", async () => {
+    const row = await repos.insertRepo(env.DB, { name: "fc-gone", description: null }, Date.now());
+    const list = (await call("GET", "/admin/repos")).html;
+    expect(list).toContain("Import failed");
+    expect(list).toContain(`action="/admin/repos/${row.id}/discard"`);
+    const r = await call("POST", `/admin/repos/${row.id}/discard`, {});
+    expect([r.status, r.location]).toEqual([303, "/admin/repos"]);
+    expect((await repos.findRepoById(env.DB, row.id))!.name).toBe(`~${row.id}`);
+    expect(await repos.findRepoByName(env.DB, "fc-gone")).toBeNull();
+  });
+  it("Discard on an import still running says so and changes nothing", async () => {
+    const row = await repos.insertRepo(env.DB, { name: "fc-slow", description: null }, Date.now());
+    await fake.import({ source: { url: "https://example.com/a.git" }, target: { name: row.storage_name } });
+    expect((await call("GET", "/admin/repos")).html).not.toContain(`/admin/repos/${row.id}/discard`);
+    const r = await call("POST", `/admin/repos/${row.id}/discard`, {});
+    expect(r.status).toBe(422);
+    expect(r.html).toContain("It&#39;s still importing.");
+    expect((await repos.findRepoById(env.DB, row.id))!.name).toBe("fc-slow");
+  });
+  it("Discard on an import that finished marks it created", async () => {
+    const row = await repos.insertRepo(env.DB, { name: "fc-done", description: null }, Date.now());
+    await fake.create(row.storage_name);
+    const r = await call("POST", `/admin/repos/${row.id}/discard`, {});
+    expect([r.status, r.location]).toEqual([303, `/admin/repos/${row.id}`]);
+    expect((await repos.findRepoById(env.DB, row.id))!.provisioned_at).not.toBeNull();
+  });
+  it("Discard 404s for a created, a deleted or an unknown repo", async () => {
+    const id = (await call("POST", "/admin/repos", { name: "fc-made" })).location!.split("/").pop()!;
+    expect((await call("POST", `/admin/repos/${id}/discard`, {})).status).toBe(404);
+    await repos.setDeleted(env.DB, id, true, Date.now());
+    expect((await call("POST", `/admin/repos/${id}/discard`, {})).status).toBe(404);
+    expect((await call("POST", "/admin/repos/no-such-id/discard", {})).status).toBe(404);
   });
 });
 

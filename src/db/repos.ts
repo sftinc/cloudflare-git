@@ -48,8 +48,9 @@ export async function listLiveRepos(db: D1Database) {
   return results;
 }
 
+/** Every repo except never-created rows that were given up (retired). */
 export async function listReposForAdmin(db: D1Database) {
-  const { results } = await db.prepare("SELECT * FROM repos ORDER BY name").all<RepoRow>();
+  const { results } = await db.prepare("SELECT * FROM repos WHERE deleted_at IS NULL OR provisioned_at IS NOT NULL ORDER BY name").all<RepoRow>();
   return results;
 }
 
@@ -63,8 +64,18 @@ export async function insertRepo(db: D1Database, r: { name: string; description:
   return row;
 }
 
+/** A retired row (deleted while never created) is never marked provisioned. */
 export async function markProvisioned(db: D1Database, id: string, now: number) {
-  await db.prepare("UPDATE repos SET provisioned_at = ?1, updated_at = ?1 WHERE id = ?2 AND provisioned_at IS NULL").bind(now, id).run();
+  await db.prepare("UPDATE repos SET provisioned_at = ?1, updated_at = ?1 WHERE id = ?2 AND provisioned_at IS NULL AND deleted_at IS NULL").bind(now, id).run();
+}
+
+/** Gives a never-created row's name back: '~<id>' can't be typed, so it can't collide. Returns whether it retired the row. */
+export async function retireRepo(db: D1Database, id: string, now: number) {
+  const res = await db
+    .prepare("UPDATE repos SET name = '~' || id, deleted_at = ?1, updated_at = ?1 WHERE id = ?2 AND provisioned_at IS NULL AND deleted_at IS NULL")
+    .bind(now, id)
+    .run();
+  return res.meta.changes > 0;
 }
 
 export async function setPublic(db: D1Database, id: string, isPublic: boolean, now: number) {

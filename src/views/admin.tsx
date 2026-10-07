@@ -40,7 +40,7 @@ function Post(props: { action: string; label: string; class?: string; name?: str
 
 export function repoState(r: RepoRow, pending: Set<string>) {
   if (r.deleted_at !== null) return <span class="badge bad">Deleted</span>;
-  if (r.provisioned_at === null) return pending.has(r.id) ? <span class="badge warn">Importing…</span> : <span class="badge bad">Not created</span>;
+  if (r.provisioned_at === null) return pending.has(r.id) ? <span class="badge warn">Importing…</span> : <span class="badge bad">Import failed</span>;
   return r.public_at !== null ? <span class="badge ok">Public</span> : <span class="badge">Private</span>;
 }
 
@@ -77,7 +77,11 @@ export function AdminRepos(props: { repos: RepoRow[]; pending: Set<string> }) {
                 <td><a href={`/admin/repos/${r.id}`}><strong>{r.name}</strong></a>{r.description && <div class="muted">{r.description}</div>}</td>
                 <td>{repoState(r, props.pending)}</td>
                 <td class="muted">{day(r.created_at)}</td>
-                <td>{r.provisioned_at !== null && <a href={repoHref(r.name)}>View</a>}</td>
+                <td>
+                  {r.provisioned_at !== null
+                    ? <a href={repoHref(r.name)}>View</a>
+                    : !props.pending.has(r.id) && <Post action={`/admin/repos/${r.id}/discard`} label="Discard" class="danger" />}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -241,19 +245,26 @@ export function AdminRepo(props: {
             <div class="row-text"><strong>Restore this repo</strong><span>Bring it back with its webhooks and access.</span></div>
             <Post action={`/admin/repos/${r.id}/restore`} label="Restore this repo" />
           </div>
+        ) : !live ? (
+          props.status === "pending" ? (
+            <p class="row muted">Still importing. Reload this page to check again.</p>
+          ) : (
+            <div class="row">
+              <div class="row-text"><strong>Discard this import</strong><span>It was never created. Discarding gives its name back.</span></div>
+              <Post action={`/admin/repos/${r.id}/discard`} label="Discard" class="danger" />
+            </div>
+          )
         ) : (
           <>
-            {live && (
-              <div class="row">
-                <div class="row-text">
-                  <strong>Change visibility</strong>
-                  <span>{r.public_at !== null ? "This repo is public: anyone can browse and clone it." : "This repo is private: only you and invitees can see it."}</span>
-                </div>
-                {r.public_at !== null
-                  ? <Post action={`/admin/repos/${r.id}/visibility`} name="public" value="0" label="Make private" class="danger" />
-                  : <Post action={`/admin/repos/${r.id}/visibility`} name="public" value="1" label="Make public" class="danger" />}
+            <div class="row">
+              <div class="row-text">
+                <strong>Change visibility</strong>
+                <span>{r.public_at !== null ? "This repo is public: anyone can browse and clone it." : "This repo is private: only you and invitees can see it."}</span>
               </div>
-            )}
+              {r.public_at !== null
+                ? <Post action={`/admin/repos/${r.id}/visibility`} name="public" value="0" label="Make private" class="danger" />
+                : <Post action={`/admin/repos/${r.id}/visibility`} name="public" value="1" label="Make public" class="danger" />}
+            </div>
             <div class="row">
               <div class="row-text"><strong>Delete this repo</strong><span>You can restore it later from the Repos page.</span></div>
               <Post action={`/admin/repos/${r.id}/delete`} label="Delete this repo" class="danger" />
