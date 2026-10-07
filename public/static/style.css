@@ -284,6 +284,9 @@ fieldset:has(input[name=all]:checked) label:has(input[name=repos]) { opacity: .4
 .add-hook { background: var(--code-bg); }
 .hook code { flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere; }
 .hook-status { flex-basis: 100%; font-size: 13px; }
+.hook-secret { flex-basis: 100%; font-size: 13px; }
+.hook-secret summary { cursor: pointer; color: var(--accent); width: max-content; }
+.hook-secret code { display: block; overflow-wrap: anywhere; padding: 6px 0; }
 .tag { font-size: 12px; font-family: var(--mono); background: var(--badge-bg); border: 1px solid var(--border); border-radius: 999px; padding: 0 8px; }
 .tag.all { font-family: inherit; color: var(--muted); }
 .error { background: var(--error-bg); color: var(--error-text); border: 1px solid var(--error-border); border-radius: 8px; padding: 10px 14px; margin: 16px 0; }

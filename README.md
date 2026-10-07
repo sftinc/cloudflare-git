@@ -173,7 +173,7 @@ branch, the Worker POSTs one JSON body per branch:
 ```
 
 `X-Signature-256` is `sha256=` plus the hex HMAC-SHA256 of the raw body with the webhook's secret
-(shown once when you add it). There are no retries; the repo's admin page shows each hook's latest delivery result. Verify it like this:
+(under **Show secret** in the repo's webhook list). There are no retries; the repo's admin page shows each hook's latest delivery result. Verify it like this:
 
 ```js
 import { createHmac, timingSafeEqual } from "node:crypto";

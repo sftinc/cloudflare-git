@@ -84,6 +84,11 @@ function secretOf(html) {
   if (!m) throw new Error("no <code id=\"secret\"> in page");
   return unescape(m[1]);
 }
+/** A create answers 303 and sets a one-time flash cookie; the page it redirects to shows the value. */
+async function followFlash(res) {
+  const cookie = res.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
+  return fetch(`${ORIGIN}${res.headers.get("location")}`, { headers: { "Cf-Access-Jwt-Assertion": jwt, Cookie: cookie } });
+}
 async function createRepo(name) {
   const res = await admin("POST", "/admin/repos", { name, description: `E2E ${name}`, defaultBranch: "main" });
   const id = res.status === 303 && res.headers.get("location")?.match(/^\/admin\/repos\/([^/]+)$/)?.[1];
@@ -97,9 +102,8 @@ async function makePublic(id) {
 }
 async function createInvite(repoId, label) {
   const res = await admin("POST", "/admin/invites", { label, repos: repoId, redeem: "24h", access: "never" });
-  const html = await res.text();
-  check(`create invite "${label}"`, res.status === 200, `status ${res.status}`);
-  return secretOf(html);
+  check(`create invite "${label}"`, res.status === 303, `status ${res.status}`);
+  return secretOf(await (await followFlash(res)).text());
 }
 
 // 6. Realistic local repo
@@ -459,6 +463,8 @@ async function screenshots(ids, inviteForBrowser) {
       "admin-token-created",
     );
     check("browser token form shows the new token", (await evaluate("!!document.querySelector('code#secret')")) === true);
+    await shot("admin-token-refreshed", await evaluate("location.href"));
+    check("a refresh doesn't show the token again", (await evaluate("document.body.innerText")).includes("can't be shown again"));
     await send("Network.setExtraHTTPHeaders", { headers: {} });
 
     check("no script errors or CSP violations in the browser", errors.length === 0, errors.join(" | "));
@@ -511,13 +517,15 @@ async function main() {
   // 5. Setup through admin
   check("admin rejects requests without a JWT", (await fetch(`${ORIGIN}/admin`)).status === 404);
   const tokenRes = await admin("POST", "/admin/tokens", { name: "e2e", all: "1", expires: "never" });
-  check("create push token", tokenRes.status === 200, `status ${tokenRes.status}`);
-  const pushToken = secretOf(await tokenRes.text());
+  check("create push token", tokenRes.status === 303, `status ${tokenRes.status}`);
+  const pushToken = secretOf(await (await followFlash(tokenRes)).text());
   const ids = { pub: await createRepo(NAMES.pub), priv: await createRepo(NAMES.priv) };
   await makePublic(ids.pub);
   const hookRes = await admin("POST", `/admin/repos/${ids.pub}/webhooks`, { url: `http://localhost:${HOOK_PORT}/hook`, branch: "main" });
-  check("add webhook", hookRes.status === 200, `status ${hookRes.status}`);
-  const hookSecret = secretOf(await hookRes.text());
+  check("add webhook", hookRes.status === 303, `status ${hookRes.status}`);
+  const hookPage = await (await admin("GET", `/admin/repos/${ids.pub}`)).text();
+  const hookSecret = unescape(hookPage.match(/<summary>Show secret<\/summary><code>([^<]*)<\/code>/)?.[1] ?? "");
+  check("the webhook's secret is listed", hookSecret.length > 0);
 
   // 6. Local repo
   buildRepo();

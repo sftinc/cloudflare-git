@@ -1,4 +1,5 @@
 import { Hono, type Context } from "hono";
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { AppEnv } from "../index";
 import { verifyAccessJwt } from "../auth/access-jwt";
 import { findAlias, findRepoById, findRepoByName, listLiveRepos, listReposForAdmin, renameRepo, retireRepo, setDeleted, setDescription, setPublic } from "../db/repos";
@@ -43,6 +44,27 @@ async function missingRepo(db: D1Database, ids: string[]) {
 async function activeRepo(c: Context<AppEnv>) {
   const repo = await findRepoById(c.env.DB, c.req.param("id")!);
   return repo && repo.deleted_at === null ? repo : null;
+}
+
+/** Spec §8: a one-time value crosses the redirect in a cookie of its own, so two tabs can't wipe each other's. */
+const flashCookie = (id: string) => `admin_flash_${id}`;
+const FLASH = { httpOnly: true, secure: true, sameSite: "Strict", path: "/admin" } as const;
+
+function setFlash(c: Context<AppEnv>, id: string, value: string) {
+  setCookie(c, flashCookie(id), JSON.stringify(value), { ...FLASH, maxAge: 60 });
+}
+
+/** The value, once: the cookie is cleared. Null when it is gone (refresh, expiry) or unreadable. */
+function takeFlash(c: Context<AppEnv>, id: string): string | null {
+  const raw = getCookie(c, flashCookie(id));
+  if (raw === undefined) return null;
+  deleteCookie(c, flashCookie(id), FLASH);
+  try {
+    const value: unknown = JSON.parse(raw);
+    return typeof value === "string" ? value : null;
+  } catch {
+    return null;
+  }
 }
 
 async function reposPage(c: Context<AppEnv>) {
@@ -204,7 +226,7 @@ adminRoutes.post("/repos/:id/webhooks", async (c) => {
   if (error) return repoPage(c, { error }, 422);
   const secret = randomSecret();
   await createWebhook(c.env.DB, { repoId: repo.id, url, branch: str(b.branch).replace(/^refs\/heads\//, "") || null, secret }, Date.now());
-  return repoPage(c, { secret: { title: "Webhook signing secret", value: secret } });
+  return c.redirect(`/admin/repos/${repo.id}`, 303);
 });
 
 adminRoutes.post("/repos/:id/webhooks/:hid/delete", async (c) => {
@@ -224,13 +246,18 @@ adminRoutes.post("/repos/:id/direct-push", async (c) => {
   return repoPage(c, { secret: { title: "Direct push URL (1 hour)", value: url.toString() } });
 });
 
-async function invitesPage(c: Context<AppEnv>, extra: { link?: string; error?: string } = {}, status = 200) {
+async function invitesPage(c: Context<AppEnv>, extra: { link?: string; error?: string; gone?: string } = {}, status = 200) {
   const now = Date.now();
   const invites = (await listInvites(c.env.DB)).map((i) => ({ ...i, status: inviteStatus(i, now) }));
   return admin(c, "Invites · admin", <AdminInvites invites={invites} repos={await listLiveRepos(c.env.DB)} {...extra} />, status);
 }
 
-adminRoutes.get("/invites", (c) => invitesPage(c));
+adminRoutes.get("/invites", (c) => {
+  const flash = c.req.query("flash");
+  if (!flash) return invitesPage(c);
+  const link = takeFlash(c, flash);
+  return invitesPage(c, link ? { link } : { gone: flash });
+});
 
 adminRoutes.post("/invites", async (c) => {
   const b = await c.req.parseBody({ all: true });
@@ -247,8 +274,9 @@ adminRoutes.post("/invites", async (c) => {
   if (!allRepos && (await missingRepo(c.env.DB, repoIds))) return invitesPage(c, { error: NO_SUCH_REPO }, 422);
   const code = randomSecret();
   const now = Date.now();
-  await createInvite(c.env.DB, { label, codeHash: await sha256Hex(code), accessMs: ACCESS_LENGTHS[access], redeemByAt: now + REDEEM_WINDOWS[redeem], repoIds, allRepos }, now);
-  return invitesPage(c, { link: `${siteOrigin(c)}/invite/${code}` });
+  const id = await createInvite(c.env.DB, { label, codeHash: await sha256Hex(code), accessMs: ACCESS_LENGTHS[access], redeemByAt: now + REDEEM_WINDOWS[redeem], repoIds, allRepos }, now);
+  setFlash(c, id, `${siteOrigin(c)}/invite/${code}`);
+  return c.redirect(`/admin/invites?flash=${id}`, 303);
 });
 
 adminRoutes.post("/invites/:id/revoke", async (c) => {
@@ -261,11 +289,16 @@ adminRoutes.post("/invites/:id/delete", async (c) => {
   return c.redirect("/admin/invites", 303);
 });
 
-async function tokensPage(c: Context<AppEnv>, extra: { created?: string; error?: string } = {}, status = 200) {
+async function tokensPage(c: Context<AppEnv>, extra: { created?: string; error?: string; gone?: string } = {}, status = 200) {
   return admin(c, "Push tokens · admin", <AdminTokens tokens={await listPushTokens(c.env.DB)} repos={await listLiveRepos(c.env.DB)} now={Date.now()} origin={siteOrigin(c)} {...extra} />, status);
 }
 
-adminRoutes.get("/tokens", (c) => tokensPage(c));
+adminRoutes.get("/tokens", (c) => {
+  const flash = c.req.query("flash");
+  if (!flash) return tokensPage(c);
+  const created = takeFlash(c, flash);
+  return tokensPage(c, created ? { created } : { gone: flash });
+});
 
 adminRoutes.post("/tokens", async (c) => {
   const b = await c.req.parseBody({ all: true });
@@ -281,8 +314,9 @@ adminRoutes.post("/tokens", async (c) => {
   const now = Date.now();
   const ms = ACCESS_LENGTHS[expires];
   const token = randomSecret();
-  await createPushToken(c.env.DB, { name, tokenHash: await sha256Hex(token), repoIds, allRepos, expiresAt: ms === null ? null : now + ms }, now);
-  return tokensPage(c, { created: token });
+  const id = await createPushToken(c.env.DB, { name, tokenHash: await sha256Hex(token), repoIds, allRepos, expiresAt: ms === null ? null : now + ms }, now);
+  setFlash(c, id, token);
+  return c.redirect(`/admin/tokens?flash=${id}`, 303);
 });
 
 adminRoutes.post("/tokens/:id/revoke", async (c) => {

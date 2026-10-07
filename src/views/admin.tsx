@@ -29,6 +29,15 @@ export function Secret(props: { title: string; value: string; children?: unknown
   );
 }
 
+/** After a refresh the one-time value is gone with its cookie. */
+function Gone(props: { title: string }) {
+  return (
+    <div class="secret">
+      <strong>{props.title}</strong> <span class="muted">It can't be shown again: revoke it and create a new one.</span>
+    </div>
+  );
+}
+
 function Post(props: { action: string; label: string; class?: string; name?: string; value?: string }) {
   return (
     <form method="post" action={props.action}>
@@ -222,6 +231,11 @@ export function AdminRepo(props: {
                 {h.branch ? <span class="tag">{h.branch}</span> : <span class="tag all">All branches</span>}
                 <Post action={`/admin/repos/${r.id}/webhooks/${h.id}/delete`} label="Delete" class="danger" />
                 <span class="hook-status muted">{lastDelivery(h, props.now)}</span>
+                <details class="hook-secret">
+                  <summary>Show secret</summary>
+                  <code>{h.secret}</code>
+                  <button type="button" class="btn" data-copy={h.secret}>Copy</button>
+                </details>
               </div>
             ))}
             {props.hooks.length === 0 && <p class="row muted">No webhooks yet.</p>}
@@ -294,12 +308,14 @@ function ExpirySelect(props: { name: string; selected: string }) {
   );
 }
 
-export function AdminInvites(props: { invites: (InviteRow & { repo_names: string; status: string })[]; repos: RepoRow[]; link?: string; error?: string }) {
+export function AdminInvites(props: { invites: (InviteRow & { repo_names: string; status: string })[]; repos: RepoRow[]; link?: string; error?: string; gone?: string }) {
+  const gone = props.gone ? props.invites.find((i) => i.id === props.gone) : undefined;
   return (
     <>
       <h1 class="page-title">Invites</h1>
       {props.error && <div class="error">{props.error}</div>}
       {props.link && <Secret title="Invite link" value={props.link} />}
+      {gone && <Gone title={`Invite for "${gone.label}" was created.`} />}
       <section class="card form-card">
         <h2>New invite</h2>
         <form method="post" action="/admin/invites" class="stack">
@@ -343,7 +359,8 @@ export function AdminInvites(props: { invites: (InviteRow & { repo_names: string
   );
 }
 
-export function AdminTokens(props: { tokens: (PushTokenRow & { repo_names: string | null })[]; repos: RepoRow[]; now: number; created?: string; origin: string; error?: string }) {
+export function AdminTokens(props: { tokens: (PushTokenRow & { repo_names: string | null })[]; repos: RepoRow[]; now: number; created?: string; origin: string; error?: string; gone?: string }) {
+  const gone = props.gone ? props.tokens.find((t) => t.id === props.gone) : undefined;
   return (
     <>
       <h1 class="page-title">Push tokens</h1>
@@ -353,6 +370,7 @@ export function AdminTokens(props: { tokens: (PushTokenRow & { repo_names: strin
           <GitSetup origin={props.origin} password={props.created} />
         </Secret>
       )}
+      {gone && <Gone title={`Push token "${gone.name}" was created.`} />}
       {props.tokens.length > 0 && (
         <div class="card table-scroll">
           <table class="list">

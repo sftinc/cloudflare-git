@@ -32,8 +32,11 @@ async function call(method: string, path: string, form?: Record<string, string |
     headers: { "cf-access-jwt-assertion": jwt, Origin: "https://git.test", ...(form ? { "Content-Type": "application/x-www-form-urlencoded" } : {}), ...headers },
     body: form ? body : undefined,
   }, await ownerEnv({ ARTIFACTS: fake }));
-  return { status: res.status, location: res.headers.get("location"), html: await res.text() };
+  return { status: res.status, location: res.headers.get("location"), html: await res.text(), cookie: res.headers.get("set-cookie") };
 }
+
+/** Follows a create's redirect the way a browser does, sending back the flash cookie it set. */
+const follow = (r: { location: string | null; cookie: string | null }) => call("GET", r.location!, undefined, r.cookie ? { cookie: r.cookie.split(";")[0] } : {});
 
 describe("admin auth", () => {
   it("is 404 without a valid Access JWT", async () => {
@@ -138,12 +141,15 @@ describe("repos", () => {
     await call("POST", `/admin/repos/${id}/restore`, {});
     expect((await repos.findRepoById(env.DB, id))!.deleted_at).toBeNull();
   });
-  it("adds a webhook and shows its secret once", async () => {
+  it("adds a webhook, redirects, and lists its secret", async () => {
     const id = (await call("POST", "/admin/repos", { name: "hooky" })).location!.split("/").pop()!;
     const added = await call("POST", `/admin/repos/${id}/webhooks`, { url: "https://ci.test/hook", branch: "main" });
-    expect(secretOf(added.html)).toMatch(/^[A-Za-z0-9_-]{43}$/);
-    const page = await call("GET", `/admin/repos/${id}`);
+    expect([added.status, added.location]).toEqual([303, `/admin/repos/${id}`]);
+    const [hook] = await hooks.listWebhooks(env.DB, id);
+    expect(hook.secret).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    const page = await call("GET", added.location!);
     expect(page.html).toContain("https://ci.test/hook");
+    expect(page.html).toContain(`<details class="hook-secret"><summary>Show secret</summary><code>${hook.secret}</code>`);
     expect(secretOf(page.html)).toBeUndefined();
     expect((await call("POST", `/admin/repos/${id}/webhooks`, { url: "http://evil.test/hook" })).status).toBe(422);
   });
@@ -488,7 +494,7 @@ describe("taking another repo's old name", () => {
 describe("invites and tokens", () => {
   it("creates an invite link", async () => {
     const id = (await call("POST", "/admin/repos", { name: "inv" })).location!.split("/").pop()!;
-    const r = await call("POST", "/admin/invites", { label: "Sam", repos: [id], redeem: "24h", access: "never" });
+    const r = await follow(await call("POST", "/admin/invites", { label: "Sam", repos: [id], redeem: "24h", access: "never" }));
     expect(secretOf(r.html)).toMatch(/^https:\/\/git\.test\/invite\/[A-Za-z0-9_-]{43}$/);
     expect(r.html).toContain("waiting");
     expect((await call("POST", "/admin/invites", { label: "", repos: [], redeem: "24h", access: "never" })).status).toBe(422);
@@ -507,7 +513,7 @@ describe("invites and tokens", () => {
     expect(r.html).toContain("All repositories");
   });
   it("creates a push token that git accepts, then revokes it", async () => {
-    const r = await call("POST", "/admin/tokens", { name: "laptop", all: "1", expires: "never" });
+    const r = await follow(await call("POST", "/admin/tokens", { name: "laptop", all: "1", expires: "never" }));
     const tok = secretOf(r.html)!;
     expect(r.html).toContain(`echo url=https://x:${tok}@git.test|git credential approve`);
     const id = (await call("POST", "/admin/repos", { name: "tk" })).location!.split("/").pop()!;
@@ -564,6 +570,49 @@ describe("actions on missing or deleted things", () => {
         expect((await call("POST", `/admin/${kind}/${id}/${action}`, {})).status, `${kind} ${action} deleted`).toBe(404);
         expect((await call("POST", `/admin/${kind}/no-such-id/${action}`, {})).status, `${kind} ${action} unknown`).toBe(404);
       }
+    }
+  });
+});
+
+describe("refreshing after a create", () => {
+  it("tokens: the value crosses the redirect once, in its own cookie", async () => {
+    const r = await call("POST", "/admin/tokens", { name: "rf-tok", all: "1", expires: "never" });
+    const id = (await tokens.listPushTokens(env.DB)).find((t) => t.name === "rf-tok")!.id;
+    expect([r.status, r.location]).toEqual([303, `/admin/tokens?flash=${id}`]);
+    for (const part of [`admin_flash_${id}=`, "Max-Age=60", "Path=/admin", "HttpOnly", "Secure", "SameSite=Strict"]) expect(r.cookie).toContain(part);
+    const first = await follow(r);
+    const tok = secretOf(first.html)!;
+    expect(await tokens.findValidPushTokenId(env.DB, await sha256Hex(tok), "any-repo", Date.now())).toBe(id);
+    expect(first.html).toContain("git credential approve");
+    expect(first.cookie).toMatch(new RegExp(`^admin_flash_${id}=;.*Max-Age=0`));
+    const again = await call("GET", r.location!);
+    expect(secretOf(again.html)).toBeUndefined();
+    expect(again.html).toContain("Push token &quot;rf-tok&quot; was created.");
+    expect(again.html).toContain("It can&#39;t be shown again: revoke it and create a new one.");
+  });
+  it("invites: two creations interleaved each show their own link", async () => {
+    const a = await call("POST", "/admin/invites", { label: "rf-a", all: "1", redeem: "24h", access: "never" });
+    const b = await call("POST", "/admin/invites", { label: "rf-b", all: "1", redeem: "24h", access: "never" });
+    const both = [a.cookie!, b.cookie!].map((c) => c.split(";")[0]).join("; ");
+    const linkB = secretOf((await call("GET", b.location!, undefined, { cookie: both })).html)!;
+    const linkA = secretOf((await call("GET", a.location!, undefined, { cookie: both })).html)!;
+    const list = await invites.listInvites(env.DB);
+    expect(list.find((i) => i.label === "rf-a")!.code_hash).toBe(await sha256Hex(linkA.split("/").pop()!));
+    expect(list.find((i) => i.label === "rf-b")!.code_hash).toBe(await sha256Hex(linkB.split("/").pop()!));
+    const again = await call("GET", a.location!);
+    expect(secretOf(again.html)).toBeUndefined();
+    expect(again.html).toContain("Invite for &quot;rf-a&quot; was created.");
+  });
+  it("a flash with a tampered cookie or an unknown id never fails", async () => {
+    const r = await call("POST", "/admin/tokens", { name: "rf-bad", all: "1", expires: "never" });
+    const tampered = await call("GET", r.location!, undefined, { cookie: `${r.cookie!.split("=")[0]}=not-json` });
+    expect(tampered.status).toBe(200);
+    expect(secretOf(tampered.html)).toBeUndefined();
+    expect(tampered.html).toContain("Push token &quot;rf-bad&quot; was created.");
+    for (const p of ["/admin/tokens?flash=no-such-id", "/admin/invites?flash=no-such-id"]) {
+      const page = await call("GET", p);
+      expect(page.status).toBe(200);
+      expect(page.html).not.toContain("was created.");
     }
   });
 });
