@@ -110,12 +110,18 @@ export async function listInvites(db: D1Database) {
   return results;
 }
 
+/** Revoking twice keeps the first time. False if the invite doesn't exist or is deleted. */
 export async function revokeInvite(db: D1Database, id: string, now: number) {
-  await db.prepare("UPDATE invites SET revoked_at = ?1, updated_at = ?1 WHERE id = ?2 AND revoked_at IS NULL").bind(now, id).run();
+  const res = await db
+    .prepare("UPDATE invites SET revoked_at = COALESCE(revoked_at, ?1), updated_at = ?1 WHERE id = ?2 AND deleted_at IS NULL")
+    .bind(now, id)
+    .run();
+  return res.meta.changes > 0;
 }
 
 export async function deleteInvite(db: D1Database, id: string, now: number) {
-  await db.prepare("UPDATE invites SET deleted_at = ?1, updated_at = ?1 WHERE id = ?2").bind(now, id).run();
+  const res = await db.prepare("UPDATE invites SET deleted_at = ?1, updated_at = ?1 WHERE id = ?2 AND deleted_at IS NULL").bind(now, id).run();
+  return res.meta.changes > 0;
 }
 
 export function inviteStatus(inv: InviteRow, now: number): "waiting" | "active" | "expired" | "revoked" {

@@ -38,8 +38,13 @@ export async function matchingWebhooks(db: D1Database, repoId: string, branch: s
   return results;
 }
 
-export async function deleteWebhook(db: D1Database, id: string, now: number) {
-  await db.prepare("UPDATE webhooks SET deleted_at = ?1, updated_at = ?1 WHERE id = ?2").bind(now, id).run();
+/** Deletes a hook of this repo; false if it has none by that id (another repo's, unknown, or already deleted). */
+export async function deleteWebhook(db: D1Database, repoId: string, id: string, now: number) {
+  const res = await db
+    .prepare("UPDATE webhooks SET deleted_at = ?1, updated_at = ?1 WHERE id = ?2 AND repo_id = ?3 AND deleted_at IS NULL")
+    .bind(now, id, repoId)
+    .run();
+  return res.meta.changes > 0;
 }
 
 /** Deliveries overlap (one per push and branch), so this is the most recently recorded one: last write wins. Not an edit, so updated_at stays. */

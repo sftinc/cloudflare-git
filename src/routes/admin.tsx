@@ -39,6 +39,12 @@ async function missingRepo(db: D1Database, ids: string[]) {
   return ids.some((id) => !live.has(id));
 }
 
+/** The repo in the URL, unless it doesn't exist or is deleted. */
+async function activeRepo(c: Context<AppEnv>) {
+  const repo = await findRepoById(c.env.DB, c.req.param("id")!);
+  return repo && repo.deleted_at === null ? repo : null;
+}
+
 async function reposPage(c: Context<AppEnv>) {
   const now = Date.now();
   const repos = await listReposForAdmin(c.env.DB);
@@ -99,8 +105,8 @@ async function repoPage(c: Context<AppEnv>, extra: { secret?: { title: string; v
 adminRoutes.get("/repos/:id", (c) => repoPage(c));
 
 adminRoutes.post("/repos/:id/description", async (c) => {
-  const repo = await findRepoById(c.env.DB, c.req.param("id"));
-  if (!repo || repo.deleted_at !== null) return c.notFound();
+  const repo = await activeRepo(c);
+  if (!repo) return c.notFound();
   const description = str((await c.req.parseBody()).description);
   if (description.length > DESCRIPTION_MAX) return repoPage(c, { error: `Keep the description to ${DESCRIPTION_MAX} characters or fewer.`, description }, 422);
   await setDescription(c.env.DB, repo.id, description || null, Date.now());
@@ -108,8 +114,8 @@ adminRoutes.post("/repos/:id/description", async (c) => {
 });
 
 adminRoutes.post("/repos/:id/rename", async (c) => {
-  const repo = await findRepoById(c.env.DB, c.req.param("id"));
-  if (!repo || repo.deleted_at !== null) return c.notFound();
+  const repo = await activeRepo(c);
+  if (!repo) return c.notFound();
   const b = await c.req.parseBody();
   const name = str(b.name);
   const takeAlias = str(b.take_alias) || null;
@@ -144,9 +150,11 @@ adminRoutes.post("/repos/:id/rename", async (c) => {
 });
 
 adminRoutes.post("/repos/:id/visibility", async (c) => {
+  const repo = await activeRepo(c);
+  if (!repo) return c.notFound();
   const b = await c.req.parseBody();
-  await setPublic(c.env.DB, c.req.param("id"), b.public === "1", Date.now());
-  return c.redirect(`/admin/repos/${c.req.param("id")}`, 303);
+  await setPublic(c.env.DB, repo.id, b.public === "1", Date.now());
+  return c.redirect(`/admin/repos/${repo.id}`, 303);
 });
 
 adminRoutes.post("/repos/:id/delete", async (c) => {
@@ -188,22 +196,25 @@ function webhookUrlError(raw: string): string | null {
 }
 
 adminRoutes.post("/repos/:id/webhooks", async (c) => {
+  const repo = await activeRepo(c);
+  if (!repo) return c.notFound();
   const b = await c.req.parseBody();
   const url = str(b.url);
   const error = webhookUrlError(url);
   if (error) return repoPage(c, { error }, 422);
   const secret = randomSecret();
-  await createWebhook(c.env.DB, { repoId: c.req.param("id"), url, branch: str(b.branch).replace(/^refs\/heads\//, "") || null, secret }, Date.now());
+  await createWebhook(c.env.DB, { repoId: repo.id, url, branch: str(b.branch).replace(/^refs\/heads\//, "") || null, secret }, Date.now());
   return repoPage(c, { secret: { title: "Webhook signing secret", value: secret } });
 });
 
 adminRoutes.post("/repos/:id/webhooks/:hid/delete", async (c) => {
-  await deleteWebhook(c.env.DB, c.req.param("hid"), Date.now());
-  return c.redirect(`/admin/repos/${c.req.param("id")}`, 303);
+  const repo = await activeRepo(c);
+  if (!repo || !(await deleteWebhook(c.env.DB, repo.id, c.req.param("hid"), Date.now()))) return c.notFound();
+  return c.redirect(`/admin/repos/${repo.id}`, 303);
 });
 
 adminRoutes.post("/repos/:id/direct-push", async (c) => {
-  const repo = await findRepoById(c.env.DB, c.req.param("id"));
+  const repo = await activeRepo(c);
   if (!repo) return c.notFound();
   using h = await c.env.ARTIFACTS.get(repo.storage_name);
   const [{ remote }, token] = await Promise.all([h.info(), h.createToken("write", 3600)]);
@@ -241,12 +252,12 @@ adminRoutes.post("/invites", async (c) => {
 });
 
 adminRoutes.post("/invites/:id/revoke", async (c) => {
-  await revokeInvite(c.env.DB, c.req.param("id"), Date.now());
+  if (!(await revokeInvite(c.env.DB, c.req.param("id"), Date.now()))) return c.notFound();
   return c.redirect("/admin/invites", 303);
 });
 
 adminRoutes.post("/invites/:id/delete", async (c) => {
-  await deleteInvite(c.env.DB, c.req.param("id"), Date.now());
+  if (!(await deleteInvite(c.env.DB, c.req.param("id"), Date.now()))) return c.notFound();
   return c.redirect("/admin/invites", 303);
 });
 
@@ -275,11 +286,11 @@ adminRoutes.post("/tokens", async (c) => {
 });
 
 adminRoutes.post("/tokens/:id/revoke", async (c) => {
-  await revokePushToken(c.env.DB, c.req.param("id"), Date.now());
+  if (!(await revokePushToken(c.env.DB, c.req.param("id"), Date.now()))) return c.notFound();
   return c.redirect("/admin/tokens", 303);
 });
 
 adminRoutes.post("/tokens/:id/delete", async (c) => {
-  await deletePushToken(c.env.DB, c.req.param("id"), Date.now());
+  if (!(await deletePushToken(c.env.DB, c.req.param("id"), Date.now()))) return c.notFound();
   return c.redirect("/admin/tokens", 303);
 });

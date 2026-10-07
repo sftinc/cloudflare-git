@@ -524,6 +524,50 @@ describe("invites and tokens", () => {
   });
 });
 
+describe("actions on missing or deleted things", () => {
+  const newRepo = async (name: string) => (await call("POST", "/admin/repos", { name })).location!.split("/").pop()!;
+  it("every repo action 404s for an unknown or a deleted repo", async () => {
+    const id = await newRepo("nf-gone");
+    await repos.setDeleted(env.DB, id, true, Date.now());
+    for (const target of ["no-such-id", id]) {
+      for (const action of ["visibility", "rename", "description", "direct-push", "webhooks", "webhooks/no-such-hook/delete", "delete"]) {
+        const form = { name: "nf-new", description: "x", url: "https://ci.test/hook", public: "1", confirm: "DELETE", ack: ["browse", "history", "copies"] };
+        expect((await call("POST", `/admin/repos/${target}/${action}`, form)).status, `${action} on ${target}`).toBe(404);
+      }
+    }
+    const row = (await repos.findRepoById(env.DB, id))!;
+    expect([row.name, row.description, row.public_at, row.deleted_at !== null]).toEqual(["nf-gone", null, null, true]);
+    expect(await hooks.listWebhooks(env.DB, id)).toEqual([]);
+  });
+  it("restore 404s unless the repo is deleted", async () => {
+    const id = await newRepo("nf-live");
+    expect((await call("POST", `/admin/repos/${id}/restore`, {})).status).toBe(404);
+    expect((await call("POST", "/admin/repos/no-such-id/restore", {})).status).toBe(404);
+  });
+  it("deletes a webhook only through its own repo", async () => {
+    const a = await newRepo("nf-ha");
+    const b = await newRepo("nf-hb");
+    const hook = await hooks.createWebhook(env.DB, { repoId: a, url: "https://ci.test/a", branch: null, secret: "k" }, 1);
+    expect((await call("POST", `/admin/repos/${b}/webhooks/${hook}/delete`, {})).status).toBe(404);
+    expect((await hooks.listWebhooks(env.DB, a)).map((h) => h.id)).toEqual([hook]);
+    expect((await call("POST", `/admin/repos/${a}/webhooks/${hook}/delete`, {})).status).toBe(303);
+    expect((await call("POST", `/admin/repos/${a}/webhooks/${hook}/delete`, {})).status).toBe(404);
+  });
+  it("token and invite revoke and delete 404 for unknown or deleted ids", async () => {
+    const tok = await tokens.createPushToken(env.DB, { name: "nf-tok", tokenHash: "nf-h", repoIds: [], allRepos: true }, 1);
+    const inv = await invites.createInvite(env.DB, { label: "nf-inv", codeHash: "nf-c", accessMs: null, redeemByAt: Date.now() + 1e6, repoIds: [], allRepos: true }, 1);
+    for (const [kind, id] of [["tokens", tok], ["invites", inv]] as const) {
+      expect((await call("POST", `/admin/${kind}/${id}/revoke`, {})).status).toBe(303);
+      expect((await call("POST", `/admin/${kind}/${id}/revoke`, {})).status).toBe(303); // already revoked, still there
+      expect((await call("POST", `/admin/${kind}/${id}/delete`, {})).status).toBe(303);
+      for (const action of ["revoke", "delete"]) {
+        expect((await call("POST", `/admin/${kind}/${id}/${action}`, {})).status, `${kind} ${action} deleted`).toBe(404);
+        expect((await call("POST", `/admin/${kind}/no-such-id/${action}`, {})).status, `${kind} ${action} unknown`).toBe(404);
+      }
+    }
+  });
+});
+
 describe("form checks", () => {
   const BAD_BRANCHES = ["a..b", "a//b", "/a", "a/", "-a", "a.", ".a", "a/.b", "a.lock", "a.lock/b", "a b", "a~b", "x".repeat(101)];
   it.each(BAD_BRANCHES.map((b, i) => [b, i] as const))("refuses the branch name %j for create and import", async (branch, i) => {

@@ -54,12 +54,18 @@ export async function listPushTokens(db: D1Database) {
   return results;
 }
 
+/** Revoking twice keeps the first time. False if the token doesn't exist or is deleted. */
 export async function revokePushToken(db: D1Database, id: string, now: number) {
-  await db.prepare("UPDATE push_tokens SET revoked_at = ?1, updated_at = ?1 WHERE id = ?2 AND revoked_at IS NULL").bind(now, id).run();
+  const res = await db
+    .prepare("UPDATE push_tokens SET revoked_at = COALESCE(revoked_at, ?1), updated_at = ?1 WHERE id = ?2 AND deleted_at IS NULL")
+    .bind(now, id)
+    .run();
+  return res.meta.changes > 0;
 }
 
 export async function deletePushToken(db: D1Database, id: string, now: number) {
-  await db.prepare("UPDATE push_tokens SET deleted_at = ?1, updated_at = ?1 WHERE id = ?2").bind(now, id).run();
+  const res = await db.prepare("UPDATE push_tokens SET deleted_at = ?1, updated_at = ?1 WHERE id = ?2 AND deleted_at IS NULL").bind(now, id).run();
+  return res.meta.changes > 0;
 }
 
 /** A token that is not revoked, deleted or expired, whatever repos it covers. */

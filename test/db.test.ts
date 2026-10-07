@@ -51,6 +51,15 @@ describe("repos", () => {
 });
 
 describe("invites", () => {
+  it("revoking twice keeps the first time; revoke and delete say whether the invite exists", async () => {
+    const id = await invites.createInvite(db, { label: "Twice", codeHash: "c-twice", accessMs: null, redeemByAt: T + HOUR, repoIds: [] }, T);
+    expect(await invites.revokeInvite(db, id, T)).toBe(true);
+    expect(await invites.revokeInvite(db, id, T + 5)).toBe(true);
+    expect((await invites.findInviteByCodeHash(db, "c-twice"))!.revoked_at).toBe(T);
+    expect(await invites.deleteInvite(db, id, T)).toBe(true);
+    expect(await invites.deleteInvite(db, id, T)).toBe(false);
+    expect(await invites.revokeInvite(db, id, T)).toBe(false);
+  });
   it("redeems once, inside the window, and computes expiry from redemption", async () => {
     const r = await liveRepo("priv");
     const id = await invites.createInvite(db, { label: "Sam", codeHash: "c1", accessMs: 7 * 24 * HOUR, redeemByAt: T + 24 * HOUR, repoIds: [r.id] }, T);
@@ -102,6 +111,16 @@ describe("invites", () => {
 });
 
 describe("push tokens", () => {
+  it("revoking twice keeps the first time; revoke and delete say whether the token exists", async () => {
+    const id = await tokens.createPushToken(db, { name: "twice", tokenHash: "h-twice", repoIds: [], allRepos: true }, T);
+    expect(await tokens.revokePushToken(db, id, T)).toBe(true);
+    expect(await tokens.revokePushToken(db, id, T + 5)).toBe(true);
+    expect((await tokens.listPushTokens(db)).find((t) => t.id === id)!.revoked_at).toBe(T);
+    expect(await tokens.deletePushToken(db, id, T)).toBe(true);
+    expect(await tokens.deletePushToken(db, id, T)).toBe(false);
+    expect(await tokens.revokePushToken(db, id, T)).toBe(false);
+    expect(await tokens.revokePushToken(db, "no-such-id", T)).toBe(false);
+  });
   it("a token with no repos and no All covers nothing", async () => {
     const r = await liveRepo("te");
     await tokens.createPushToken(db, { name: "empty", tokenHash: "h-none", repoIds: [] }, T);
@@ -139,7 +158,8 @@ describe("webhooks", () => {
     const main = await hooks.createWebhook(db, { repoId: r.id, url: "https://b.test/", branch: "main", secret: "s" }, T);
     expect((await hooks.matchingWebhooks(db, r.id, "main")).map((h) => h.id).sort()).toEqual([any, main].sort());
     expect((await hooks.matchingWebhooks(db, r.id, "dev")).map((h) => h.id)).toEqual([any]);
-    await hooks.deleteWebhook(db, any, T);
+    expect(await hooks.deleteWebhook(db, r.id, any, T)).toBe(true);
+    expect(await hooks.deleteWebhook(db, r.id, any, T)).toBe(false);
     expect((await hooks.matchingWebhooks(db, r.id, "dev"))).toEqual([]);
     expect((await hooks.listWebhooks(db, r.id)).map((h) => h.id)).toEqual([main]);
   });
