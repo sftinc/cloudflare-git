@@ -143,6 +143,18 @@ describe("purgeDeletedRepos", () => {
     expect((await row(failsCoded)).purged_at).toBe(NOW + HOUR);
   });
 
+  it("a failing batch logs it, leaves that row unpurged and goes on with the next row", async () => {
+    quietLog();
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const first = await deletedRepo("pg-batch-first", NOW - 42 * DAY_MS);
+    const second = await deletedRepo("pg-batch-second", NOW - 41 * DAY_MS);
+    vi.spyOn(db, "batch").mockRejectedValueOnce(new Error("D1 down"));
+    expect(await purgeDeletedRepos(db, art(), 30, NOW)).toBe(1);
+    expect((await row(first)).purged_at).toBeNull();
+    expect((await row(second)).purged_at).toBe(NOW);
+    expect(err).toHaveBeenCalledWith(JSON.stringify({ msg: "purge failed", repo: first, code: "D1", error: "Error: D1 down" }));
+  });
+
   it("purges at most 50 repos per run, oldest first", async () => {
     quietLog();
     const ids: string[] = [];
@@ -153,6 +165,8 @@ describe("purgeDeletedRepos", () => {
     expect(await purgeDeletedRepos(db, art(), 30, NOW + HOUR)).toBe(1);
   });
 
+  // Simulates a restore the route can't make (Restore stops at the window, and the purge starts 24 hours
+  // later). Only the D1 guards are under test.
   it("a repo restored after the select is not marked purged and keeps its aliases and grants", async () => {
     quietLog();
     const id = await deletedRepo("pg-race", NOW - 40 * DAY_MS);

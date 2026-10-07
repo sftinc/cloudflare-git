@@ -32,12 +32,18 @@ export async function purgeDeletedRepos(db: D1Database, art: Artifacts, days: nu
     // Every statement checks the repo is still deleted and unpurged; the repo update goes last so the
     // earlier checks still see it unpurged. A repo restored meanwhile is left alone.
     const eligible = "EXISTS (SELECT 1 FROM repos WHERE id = ?1 AND deleted_at IS NOT NULL AND purged_at IS NULL)";
-    const [, , , repo] = await db.batch([
-      db.prepare(`UPDATE repo_aliases SET deleted_at = ?2 WHERE repo_id = ?1 AND deleted_at IS NULL AND ${eligible}`).bind(r.id, now),
-      db.prepare(`UPDATE invite_repos SET deleted_at = ?2 WHERE repo_id = ?1 AND deleted_at IS NULL AND ${eligible}`).bind(r.id, now),
-      db.prepare(`UPDATE push_token_repos SET deleted_at = ?2 WHERE repo_id = ?1 AND deleted_at IS NULL AND ${eligible}`).bind(r.id, now),
-      db.prepare("UPDATE repos SET purged_at = ?2, name = '~' || id WHERE id = ?1 AND deleted_at IS NOT NULL AND purged_at IS NULL").bind(r.id, now),
-    ]);
+    let repo;
+    try {
+      [, , , repo] = await db.batch([
+        db.prepare(`UPDATE repo_aliases SET deleted_at = ?2 WHERE repo_id = ?1 AND deleted_at IS NULL AND ${eligible}`).bind(r.id, now),
+        db.prepare(`UPDATE invite_repos SET deleted_at = ?2 WHERE repo_id = ?1 AND deleted_at IS NULL AND ${eligible}`).bind(r.id, now),
+        db.prepare(`UPDATE push_token_repos SET deleted_at = ?2 WHERE repo_id = ?1 AND deleted_at IS NULL AND ${eligible}`).bind(r.id, now),
+        db.prepare("UPDATE repos SET purged_at = ?2, name = '~' || id WHERE id = ?1 AND deleted_at IS NOT NULL AND purged_at IS NULL").bind(r.id, now),
+      ]);
+    } catch (err) {
+      console.error(JSON.stringify({ msg: "purge failed", repo: r.id, code: "D1", error: String(err) }));
+      continue; // the row stays unpurged; the next run retries it
+    }
     if (repo.meta.changes > 0) count++;
   }
   if (count > 0) console.log(JSON.stringify({ msg: "purged", count }));

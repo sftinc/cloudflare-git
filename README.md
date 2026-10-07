@@ -73,7 +73,7 @@ headless Chrome (`.e2e/screenshots/`), and deletes its repos at the end. It neve
    | `SITE_TITLE` | "Cloudflare Git" |
    | `LOGO_URL` | The built-in logo. An https URL on another host is added to the page's CSP `img-src`. |
    | `COMPANY_NAME` | No "© year name" line in the footer |
-   | `RESTORE_DAYS` | 30: a deleted repo can be restored from the admin Repos page for 30 days. A whole number of days; `0` means deleted repos can't be restored. 24 hours after the window ends, an hourly cron (`triggers` in `env.production`) deletes the repo's storage for good and frees its name. |
+   | `RESTORE_DAYS` | 30: a deleted repo can be restored from the admin Repos page for 30 days. A whole number of days; `0` means deleted repos can't be restored. 24 hours after the window ends, an hourly cron (`triggers` in `env.production`) deletes the repo's storage for good and frees its name. Lowering it shortens the window for repos already deleted. |
 
    Without `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` nobody can log in: the site runs public-only and
    logs a warning.

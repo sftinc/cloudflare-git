@@ -39,7 +39,7 @@ app.onError(handleError);
 
 export default {
   fetch: app.fetch,
-  /** Spec §3: hourly, deletes the storage of repos past the restore window. */
+  /** Spec §3: hourly, deletes the storage of repos past the restore window plus 24 hours. */
   scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(purgeDeletedRepos(env.DB, env.ARTIFACTS, restoreDays(env), Date.now()));
   },
