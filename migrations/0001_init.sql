@@ -7,7 +7,8 @@ CREATE TABLE repos (
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
   provisioned_at INTEGER,
-  deleted_at INTEGER
+  deleted_at INTEGER,
+  purged_at INTEGER
 );
 CREATE UNIQUE INDEX repos_name ON repos(name);
 CREATE UNIQUE INDEX repos_storage_name ON repos(storage_name);

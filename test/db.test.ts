@@ -48,6 +48,10 @@ describe("repos", () => {
     expect(await repos.retireRepo(db, r.id, T)).toBe(false);
     expect((await repos.findRepoById(db, r.id))!.name).toBe("retire-not");
   });
+  it("puts purged_at after deleted_at", async () => {
+    const { results } = await db.prepare("PRAGMA table_info(repos)").all<{ name: string }>();
+    expect(results.map((c) => c.name)).toEqual(["id", "name", "storage_name", "description", "public_at", "created_at", "updated_at", "provisioned_at", "deleted_at", "purged_at"]);
+  });
 });
 
 describe("invites", () => {

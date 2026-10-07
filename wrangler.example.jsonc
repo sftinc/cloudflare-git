@@ -23,6 +23,8 @@
       "routes": [{ "pattern": "git.example.com", "custom_domain": true }],
       "workers_dev": false,
       "preview_urls": false,
+      // Hourly: deletes the storage of repos deleted more than RESTORE_DAYS days + 24 hours ago (see README).
+      "triggers": { "crons": ["0 * * * *"] },
       "d1_databases": [
         { "binding": "DB", "database_name": "cloudflare-git", "database_id": "REPLACE_WITH_D1_ID", "migrations_dir": "migrations" }
       ],
@@ -33,6 +35,7 @@
         "SITE_ORIGIN": "https://git.example.com"
         // Optional; leave out for the defaults (see README).
         // "SITE_TITLE": "Cloudflare Git",
+        // "RESTORE_DAYS": "30",
         // "LOGO_URL": "https://example.com/logo.svg",
         // "COMPANY_NAME": "Example Co."
       }

@@ -4,6 +4,7 @@ import { gitRoutes } from "./routes/git";
 import { adminRoutes } from "./routes/admin";
 import { publicRoutes } from "./routes/public";
 import { handleError, notFoundPage } from "./routes/errors";
+import { purgeDeletedRepos, restoreDays } from "./purge";
 
 export type AppEnv = { Bindings: Env };
 
@@ -17,7 +18,7 @@ function logoOrigin(env: Env) {
 const csp = (env: Env) =>
   `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'${logoOrigin(env)}; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'`;
 
-const app = new Hono<AppEnv>();
+export const app = new Hono<AppEnv>();
 
 app.use("*", async (c, next) => {
   await next();
@@ -36,4 +37,10 @@ app.route("/", publicRoutes);
 app.notFound(notFoundPage);
 app.onError(handleError);
 
-export default app;
+export default {
+  fetch: app.fetch,
+  /** Spec §3: hourly, deletes the storage of repos past the restore window. */
+  scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(purgeDeletedRepos(env.DB, env.ARTIFACTS, restoreDays(env), Date.now()));
+  },
+};

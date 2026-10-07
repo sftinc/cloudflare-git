@@ -1,5 +1,5 @@
 import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
-import app from "../../src/index";
+import { app } from "../../src/index";
 import { FakeArtifacts } from "./fake-artifacts";
 
 export function makeEnv(overrides: Partial<Env> & Record<string, unknown> = {}): Env {

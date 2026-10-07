@@ -4,6 +4,7 @@ interface OptionalVars {
   SITE_TITLE?: string;
   LOGO_URL?: string;
   COMPANY_NAME?: string;
+  RESTORE_DAYS?: string;
 }
 interface Env extends OptionalVars {}
 declare namespace Cloudflare {

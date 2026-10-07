@@ -10,6 +10,7 @@ export type RepoRow = {
   updated_at: number;
   provisioned_at: number | null;
   deleted_at: number | null;
+  purged_at: number | null;
 };
 
 // New repos keep their files under their id, so no name collides with storage. If Artifacts rejected UUIDs: `r${id.replaceAll("-", "")}`.
@@ -65,7 +66,7 @@ export async function listReposForAdmin(db: D1Database) {
 /** With takeAliasFrom, the same batch releases that repo's old name r.name, if it still holds it. */
 export async function insertRepo(db: D1Database, r: { name: string; description: string | null }, now: number, takeAliasFrom: string | null = null) {
   const id = uuidv7(now);
-  const row: RepoRow = { id, name: r.name, storage_name: storageNameFor(id), description: r.description, public_at: null, provisioned_at: null, created_at: now, updated_at: now, deleted_at: null };
+  const row: RepoRow = { id, name: r.name, storage_name: storageNameFor(id), description: r.description, public_at: null, provisioned_at: null, created_at: now, updated_at: now, deleted_at: null, purged_at: null };
   await db.batch([
     ...(takeAliasFrom
       ? [db.prepare("UPDATE repo_aliases SET deleted_at = ?1 WHERE name = ?2 AND repo_id = ?3 AND deleted_at IS NULL").bind(now, r.name, takeAliasFrom)]
