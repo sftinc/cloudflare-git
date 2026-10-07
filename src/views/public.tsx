@@ -67,11 +67,13 @@ export function Home(props: { repos: RepoRow[]; owner: boolean }) {
 
 export function CloneBox(props: { url: string }) {
   return (
-    <div class="clone">
-      <span class="clone-label">Clone</span>
-      <code>{props.url}</code>
-      <button type="button" class="btn" data-copy={props.url}><Copy /> Copy</button>
-    </div>
+    <>
+      <p class="clone-label"><Terminal /> Clone</p>
+      <div class="clone">
+        <code>{props.url}</code>
+        <button type="button" class="btn" data-copy={props.url}><Copy /> Copy</button>
+      </div>
+    </>
   );
 }
 
@@ -177,7 +179,7 @@ function About(props: { repo: RepoRow; branch: string; head: string | null; read
     <aside class="about">
       <h2>About</h2>
       {repo.description && <p class="about-desc">{repo.description}</p>}
-      <p class="about-label"><Terminal /> Clone</p>
+      <p class="clone-label"><Terminal /> Clone</p>
       <div class="clone">
         <code>{props.cloneUrl}</code>
         <button type="button" class="btn" data-copy={props.cloneUrl} aria-label="Copy clone URL" title="Copy"><Copy /></button>

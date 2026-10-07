@@ -118,7 +118,7 @@ footer.site .wrap { display: flex; justify-content: space-between; gap: 12px; fl
 .about { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
 .about h2 { font-size: 16px; margin: 0 0 10px; }
 .about-desc { margin: 0 0 14px; }
-.about-label { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; margin: 0 0 8px; }
+.about .clone-label { margin-top: 0; }
 .about .clone { margin: 0 0 16px; max-width: none; gap: 4px; padding: 3px 3px 3px 10px; }
 .about .clone code { font-size: 12px; scrollbar-width: none; }
 .about .clone .btn { padding: 5px 8px; }
@@ -138,7 +138,8 @@ a.node:hover { background: var(--code-bg); text-decoration: none; }
 .node > .icon:first-child, .chev-space { width: 14px; height: 14px; flex: none; }
 .node .icon.folder { color: var(--accent); fill: var(--accent); stroke: none; }
 .clone { display: flex; align-items: center; gap: 8px; margin-top: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 6px 6px 12px; max-width: 640px; }
-.clone-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.clone-label { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; margin: 16px 0 8px; }
+.clone-label + .clone { margin-top: 0; }
 .clone code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; }
 .btn, button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; font: inherit; font-size: 13px; font-weight: 600; border: 1px solid var(--border); background: var(--badge-bg); color: var(--text); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
 .btn:hover { text-decoration: none; }
