@@ -510,7 +510,7 @@ async function main() {
 
   // 5. Setup through admin
   check("admin rejects requests without a JWT", (await fetch(`${ORIGIN}/admin`)).status === 404);
-  const tokenRes = await admin("POST", "/admin/tokens", { name: "e2e", all: "1" });
+  const tokenRes = await admin("POST", "/admin/tokens", { name: "e2e", all: "1", expires: "never" });
   check("create push token", tokenRes.status === 200, `status ${tokenRes.status}`);
   const pushToken = secretOf(await tokenRes.text());
   const ids = { pub: await createRepo(NAMES.pub), priv: await createRepo(NAMES.priv) };

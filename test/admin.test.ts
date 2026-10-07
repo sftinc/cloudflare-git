@@ -5,6 +5,7 @@ import { resetAccessKeys } from "../src/auth/access-jwt";
 import { sha256Hex } from "../src/lib/crypto";
 import * as repos from "../src/db/repos";
 import * as tokens from "../src/db/tokens";
+import * as invites from "../src/db/invites";
 import * as hooks from "../src/db/webhooks";
 import { FakeArtifacts } from "./helpers/fake-artifacts";
 import { request } from "./helpers/env";
@@ -506,7 +507,7 @@ describe("invites and tokens", () => {
     expect(r.html).toContain("All repositories");
   });
   it("creates a push token that git accepts, then revokes it", async () => {
-    const r = await call("POST", "/admin/tokens", { name: "laptop", all: "1" });
+    const r = await call("POST", "/admin/tokens", { name: "laptop", all: "1", expires: "never" });
     const tok = secretOf(r.html)!;
     expect(r.html).toContain(`echo url=https://x:${tok}@git.test|git credential approve`);
     const id = (await call("POST", "/admin/repos", { name: "tk" })).location!.split("/").pop()!;
@@ -520,6 +521,69 @@ describe("invites and tokens", () => {
     expect(ci.all_repos_at).toBeNull();
     await call("POST", `/admin/tokens/${listed.id}/revoke`, {});
     expect(await tokens.findValidPushTokenId(env.DB, await sha256Hex(tok), id, Date.now())).toBeNull();
+  });
+});
+
+describe("form checks", () => {
+  const BAD_BRANCHES = ["a..b", "a//b", "/a", "a/", "-a", "a.", ".a", "a/.b", "a.lock", "a.lock/b", "a b", "a~b", "x".repeat(101)];
+  it.each(BAD_BRANCHES.map((b, i) => [b, i] as const))("refuses the branch name %j for create and import", async (branch, i) => {
+    const created = await call("POST", "/admin/repos", { name: `br-${i}`, defaultBranch: branch });
+    expect(created.status).toBe(422);
+    expect(created.html).toContain("That isn&#39;t a valid git branch name.");
+    const imported = await call("POST", "/admin/import", { name: `bri-${i}`, url: "https://github.com/a/b", branch });
+    expect(imported.status).toBe(422);
+    expect(imported.html).toContain("That isn&#39;t a valid git branch name.");
+    expect(await repos.findRepoByName(env.DB, `br-${i}`)).toBeNull();
+    expect(await repos.findRepoByName(env.DB, `bri-${i}`)).toBeNull();
+  });
+  it.each(["main", "feature/x", "v1.0", "release-2_x"].map((b, i) => [b, i] as const))("accepts the branch name %j", async (branch, i) => {
+    expect((await call("POST", "/admin/repos", { name: `brok-${i}`, defaultBranch: branch })).status).toBe(303);
+  });
+  it("shows Artifacts' INVALID_INPUT as a readable message", async () => {
+    fake.failNext = { method: "import", code: "INVALID_INPUT" };
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const r = await call("POST", "/admin/import", { name: "ck-input", url: "https://github.com/a/b" });
+    expect(r.status).toBe(422);
+    expect(r.html).toContain("Artifacts rejected the input. Check the URL and branch.");
+  });
+  it("refuses a token or invite for a repo that is gone", async () => {
+    const id = (await call("POST", "/admin/repos", { name: "ck-gone" })).location!.split("/").pop()!;
+    await repos.setDeleted(env.DB, id, true, Date.now());
+    for (const repoId of ["no-such-repo", id]) {
+      const t = await call("POST", "/admin/tokens", { name: "t-gone", repos: [repoId], expires: "never" });
+      expect(t.status).toBe(422);
+      expect(t.html).toContain("One of the selected repos no longer exists.");
+      const i = await call("POST", "/admin/invites", { label: "i-gone", repos: [repoId], redeem: "24h", access: "never" });
+      expect(i.status).toBe(422);
+      expect(i.html).toContain("One of the selected repos no longer exists.");
+    }
+    expect((await tokens.listPushTokens(env.DB)).map((t) => t.name)).not.toContain("t-gone");
+    expect((await invites.listInvites(env.DB)).map((i) => i.label)).not.toContain("i-gone");
+  });
+  it.each([undefined, "", "2y", "constructor", "toString"])("refuses token expiry %j", async (expires) => {
+    const name = `t-exp-${expires}`;
+    const r = await call("POST", "/admin/tokens", { name, all: "1", ...(expires === undefined ? {} : { expires }) });
+    expect(r.status).toBe(422);
+    expect(r.html).toContain("Pick how long the token lasts.");
+    expect((await tokens.listPushTokens(env.DB)).map((t) => t.name)).not.toContain(name);
+  });
+  it("a token never expires only when Never is chosen", async () => {
+    await call("POST", "/admin/tokens", { name: "t-never", all: "1", expires: "never" });
+    await call("POST", "/admin/tokens", { name: "t-week", all: "1", expires: "7d" });
+    const list = await tokens.listPushTokens(env.DB);
+    expect(list.find((t) => t.name === "t-never")!.expires_at).toBeNull();
+    expect(list.find((t) => t.name === "t-week")!.expires_at).not.toBeNull();
+  });
+  it.each([
+    ["redeem", "2h", "Pick how long the invite can be accepted."],
+    ["redeem", "constructor", "Pick how long the invite can be accepted."],
+    ["access", "forever", "Pick how long access lasts."],
+    ["access", "toString", "Pick how long access lasts."],
+  ])("refuses invite %s %j", async (field, value, message) => {
+    const r = await call("POST", "/admin/invites", { label: `w-${field}-${value}`, all: "1", redeem: "24h", access: "never", [field]: value });
+    expect(r.status).toBe(422);
+    expect(r.html).toContain(message);
+    expect((await invites.listInvites(env.DB)).map((i) => i.label)).not.toContain(`w-${field}-${value}`);
   });
 });
 

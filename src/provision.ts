@@ -26,6 +26,15 @@ export function validateRepoName(name: string): string | null {
   return null;
 }
 
+/** Today's characters and length, minus the names git refuses (see git check-ref-format). */
+function validBranch(b: string) {
+  return (
+    /^[A-Za-z0-9._/-]{1,100}$/.test(b) &&
+    !/\.\.|\/\/|^\/|\/$|^-|\.$/.test(b) &&
+    b.split("/").every((part) => !part.startsWith(".") && !part.endsWith(".lock"))
+  );
+}
+
 /** Spec §1a: taking another repo's old name breaks its links and clones, so the admin confirms first. */
 export function aliasWarning(name: string, owner: string) {
   return `"${name}" is an old name of repo "${owner}": links and clones using "${name}" still reach "${owner}". Taking the name breaks them right away, even if the create or import then fails.`;
@@ -35,9 +44,8 @@ function checkInput(input: ProvisionInput): ProvisionResult | null {
   const nameError = validateRepoName(input.name);
   if (nameError) return { ok: false, error: nameError };
   if (input.description.length > DESCRIPTION_MAX) return { ok: false, error: `Keep the description to ${DESCRIPTION_MAX} characters or fewer.` };
-  if (input.kind === "create" && input.defaultBranch && !/^[A-Za-z0-9._/-]{1,100}$/.test(input.defaultBranch)) {
-    return { ok: false, error: "That default branch name isn't valid." };
-  }
+  const branch = input.kind === "create" ? input.defaultBranch : input.branch;
+  if (branch && !validBranch(branch)) return { ok: false, error: "That isn't a valid git branch name." };
   if (input.kind === "import") {
     let url: URL;
     try {

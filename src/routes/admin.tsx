@@ -32,6 +32,13 @@ const admin = (c: Context<AppEnv>, title: string, body: unknown, status = 200) =
 const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 const list = (v: unknown) => (Array.isArray(v) ? v : v === undefined ? [] : [v]).filter((x): x is string => typeof x === "string");
 
+const NO_SUCH_REPO = "One of the selected repos no longer exists.";
+/** Whether a ticked repo is gone (deleted, never created, or never existed): storing it would fail. */
+async function missingRepo(db: D1Database, ids: string[]) {
+  const live = new Set((await listLiveRepos(db)).map((r) => r.id));
+  return ids.some((id) => !live.has(id));
+}
+
 async function reposPage(c: Context<AppEnv>) {
   const now = Date.now();
   const repos = await listReposForAdmin(c.env.DB);
@@ -219,14 +226,17 @@ adminRoutes.post("/invites", async (c) => {
   const label = str(b.label);
   const repoIds = list(b.repos);
   const allRepos = str(b.all) === "1";
-  const redeem = REDEEM_WINDOWS[str(b.redeem)];
+  const redeem = str(b.redeem);
   const access = str(b.access);
-  if (!label || (!allRepos && repoIds.length === 0) || redeem === undefined || !(access in ACCESS_LENGTHS)) {
+  if (!label || (!allRepos && repoIds.length === 0)) {
     return invitesPage(c, { error: "Give the invite a name and pick at least one repo, or All repositories." }, 422);
   }
+  if (!Object.hasOwn(REDEEM_WINDOWS, redeem)) return invitesPage(c, { error: "Pick how long the invite can be accepted." }, 422);
+  if (!Object.hasOwn(ACCESS_LENGTHS, access)) return invitesPage(c, { error: "Pick how long access lasts." }, 422);
+  if (!allRepos && (await missingRepo(c.env.DB, repoIds))) return invitesPage(c, { error: NO_SUCH_REPO }, 422);
   const code = randomSecret();
   const now = Date.now();
-  await createInvite(c.env.DB, { label, codeHash: await sha256Hex(code), accessMs: ACCESS_LENGTHS[access], redeemByAt: now + redeem, repoIds, allRepos }, now);
+  await createInvite(c.env.DB, { label, codeHash: await sha256Hex(code), accessMs: ACCESS_LENGTHS[access], redeemByAt: now + REDEEM_WINDOWS[redeem], repoIds, allRepos }, now);
   return invitesPage(c, { link: `${siteOrigin(c)}/invite/${code}` });
 });
 
@@ -251,11 +261,14 @@ adminRoutes.post("/tokens", async (c) => {
   const name = str(b.name);
   const repoIds = list(b.repos);
   const allRepos = str(b.all) === "1";
+  const expires = str(b.expires);
   if (!name || (!allRepos && repoIds.length === 0)) {
     return tokensPage(c, { error: "Give the token a name and pick at least one repo, or All repositories." }, 422);
   }
+  if (!Object.hasOwn(ACCESS_LENGTHS, expires)) return tokensPage(c, { error: "Pick how long the token lasts." }, 422);
+  if (!allRepos && (await missingRepo(c.env.DB, repoIds))) return tokensPage(c, { error: NO_SUCH_REPO }, 422);
   const now = Date.now();
-  const ms = ACCESS_LENGTHS[str(b.expires)] ?? null;
+  const ms = ACCESS_LENGTHS[expires];
   const token = randomSecret();
   await createPushToken(c.env.DB, { name, tokenHash: await sha256Hex(token), repoIds, allRepos, expiresAt: ms === null ? null : now + ms }, now);
   return tokensPage(c, { created: token });
