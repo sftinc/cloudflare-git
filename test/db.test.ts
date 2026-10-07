@@ -128,4 +128,9 @@ describe("webhooks", () => {
     expect((await hooks.matchingWebhooks(db, r.id, "dev"))).toEqual([]);
     expect((await hooks.listWebhooks(db, r.id)).map((h) => h.id)).toEqual([main]);
   });
+
+  it("keeps deleted_at last after the delivery columns were added", async () => {
+    const { results } = await db.prepare("PRAGMA table_info(webhooks)").all<{ name: string }>();
+    expect(results.map((c) => c.name)).toEqual(["id", "repo_id", "url", "branch", "secret", "last_result", "created_at", "updated_at", "last_attempt_at", "deleted_at"]);
+  });
 });

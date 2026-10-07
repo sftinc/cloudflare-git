@@ -6,8 +6,10 @@ export type WebhookRow = {
   url: string;
   branch: string | null;
   secret: string;
+  last_result: string | null; // "200", "500", "timeout" or "connection failed"
   created_at: number;
   updated_at: number;
+  last_attempt_at: number | null;
   deleted_at: number | null;
 };
 
@@ -38,4 +40,9 @@ export async function matchingWebhooks(db: D1Database, repoId: string, branch: s
 
 export async function deleteWebhook(db: D1Database, id: string, now: number) {
   await db.prepare("UPDATE webhooks SET deleted_at = ?1, updated_at = ?1 WHERE id = ?2").bind(now, id).run();
+}
+
+/** Deliveries overlap (one per push and branch), so this is the most recently recorded one: last write wins. Not an edit, so updated_at stays. */
+export async function recordDelivery(db: D1Database, id: string, result: string, now: number) {
+  await db.prepare("UPDATE webhooks SET last_result = ?1, last_attempt_at = ?2 WHERE id = ?3").bind(result, now, id).run();
 }

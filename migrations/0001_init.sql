@@ -74,8 +74,10 @@ CREATE TABLE webhooks (
   url TEXT NOT NULL,
   branch TEXT,
   secret TEXT NOT NULL,
+  last_result TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
+  last_attempt_at INTEGER,
   deleted_at INTEGER
 );
 CREATE INDEX webhooks_repo ON webhooks(repo_id);

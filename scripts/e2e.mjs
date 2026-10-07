@@ -540,6 +540,8 @@ async function main() {
     event.repo === NAMES.pub && event.branch === "main" && event.deleted === false && /^[0-9a-f]{40}$/.test(event.after) && event.after === mainSha,
     d.body,
   );
+  const hookStatus = await (await admin("GET", `/admin/repos/${ids.pub}`)).text();
+  check("the repo's admin page shows the delivery", hookStatus.includes("Last delivery: 200"), hookStatus.match(/Last delivery[^<]*|No deliveries yet/)?.[0] ?? "");
 
   // 9. Public clone
   const clonePub = gitStatus(["clone", "-q", `${ORIGIN}/r/${NAMES.pub}.git`, path.join(OUT, "clone-pub")]);

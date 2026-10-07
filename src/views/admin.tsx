@@ -2,13 +2,19 @@ import type { RepoRow } from "../db/repos";
 import type { InviteRow } from "../db/invites";
 import type { PushTokenRow } from "../db/tokens";
 import type { WebhookRow } from "../db/webhooks";
-import { fmtDate, NO_REPOS_OWNER } from "./public";
+import { fmtAgo, fmtDate, NO_REPOS_OWNER } from "./public";
 import { repoHref } from "../render/paths";
 import { GitSetup } from "./git-setup";
 import { DESCRIPTION_MAX } from "../provision";
 import { Book, Copy, Download, Plus } from "./icons";
 
 const day = (ms: number) => fmtDate(Math.floor(ms / 1000));
+
+/** "Last delivery: 200, 3 minutes ago"; any non-2xx result counts as failed. */
+function lastDelivery(h: WebhookRow, now: number) {
+  if (h.last_attempt_at === null) return "No deliveries yet";
+  return `Last delivery${/^2\d\d$/.test(h.last_result ?? "") ? "" : " failed"}: ${h.last_result}, ${fmtAgo(h.last_attempt_at, now)}`;
+}
 
 export type RepoFormValues = { name?: string; description?: string; defaultBranch?: string; url?: string; branch?: string; visibility?: string };
 
@@ -154,7 +160,7 @@ export function AdminNewRepo(props: { kind: "create" | "import"; error?: string;
 }
 
 export function AdminRepo(props: {
-  repo: RepoRow; status: "ready" | "pending" | "missing"; hooks: WebhookRow[];
+  repo: RepoRow; status: "ready" | "pending" | "missing"; hooks: WebhookRow[]; now: number;
   secret?: { title: string; value: string }; error?: string; description?: string; name?: string; renamedUrl?: string;
 }) {
   const r = props.repo;
@@ -206,6 +212,7 @@ export function AdminRepo(props: {
                 <code>{h.url}</code>
                 {h.branch ? <span class="tag">{h.branch}</span> : <span class="tag all">All branches</span>}
                 <Post action={`/admin/repos/${r.id}/webhooks/${h.id}/delete`} label="Delete" class="danger" />
+                <span class="hook-status muted">{lastDelivery(h, props.now)}</span>
               </div>
             ))}
             {props.hooks.length === 0 && <p class="row muted">No webhooks yet.</p>}

@@ -74,4 +74,29 @@ describe("deliverWebhooks", () => {
     expect(log).not.toHaveBeenCalled();
     expect(JSON.parse(warn.mock.calls[0][0] as string)).toMatchObject({ msg: "webhook rejected", status: 500 });
   });
+
+  it("records each hook's latest result without touching updated_at", async () => {
+    const r = await repos.insertRepo(env.DB, { name: "wh-status", description: null }, 1);
+    for (const host of ["ok", "rej", "slow", "down"]) {
+      await hooks.createWebhook(env.DB, { repoId: r.id, url: `https://${host}.test/hook`, branch: null, secret: "k" }, 1);
+    }
+    stubFetch((req) => {
+      const host = new URL(req.url).hostname;
+      if (host === "slow.test") throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+      if (host === "down.test") throw new Error("connection refused");
+      return new Response(null, { status: host === "ok.test" ? 204 : 500 });
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const before = Date.now();
+    await deliverWebhooks(env.DB, r, [{ repo: "wh-status", branch: "main", before: A, after: B, deleted: false, pushed_at: 5 }]);
+    const rows = await hooks.listWebhooks(env.DB, r.id);
+    expect(Object.fromEntries(rows.map((h) => [new URL(h.url).hostname, h.last_result]))).toEqual({
+      "ok.test": "204", "rej.test": "500", "slow.test": "timeout", "down.test": "connection failed",
+    });
+    for (const h of rows) {
+      expect(h.last_attempt_at).toBeGreaterThanOrEqual(before);
+      expect(h.updated_at).toBe(1);
+    }
+  });
 });

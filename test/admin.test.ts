@@ -224,6 +224,23 @@ describe("repo settings page", () => {
       expect(html).toContain(`<a href="${href}" aria-current="page">`);
     }
   });
+
+  it("shows each webhook's latest delivery", async () => {
+    const id = await newRepo("hook-status");
+    const ok = await hooks.createWebhook(env.DB, { repoId: id, url: "https://ok.test/hook", branch: null, secret: "k" }, 1);
+    const slow = await hooks.createWebhook(env.DB, { repoId: id, url: "https://slow.test/hook", branch: null, secret: "k" }, 1);
+    const rej = await hooks.createWebhook(env.DB, { repoId: id, url: "https://rej.test/hook", branch: null, secret: "k" }, 1);
+    await hooks.createWebhook(env.DB, { repoId: id, url: "https://none.test/hook", branch: null, secret: "k" }, 1);
+    const threeMinAgo = Date.now() - 3 * 60_000;
+    await hooks.recordDelivery(env.DB, ok, "200", threeMinAgo);
+    await hooks.recordDelivery(env.DB, slow, "timeout", threeMinAgo);
+    await hooks.recordDelivery(env.DB, rej, "500", threeMinAgo);
+    const html = (await call("GET", `/admin/repos/${id}`)).html;
+    expect(html).toContain("Last delivery: 200, 3 minutes ago");
+    expect(html).toContain("Last delivery failed: timeout, 3 minutes ago");
+    expect(html).toContain("Last delivery failed: 500, 3 minutes ago");
+    expect(html).toContain("No deliveries yet");
+  });
 });
 
 describe("rename", () => {
