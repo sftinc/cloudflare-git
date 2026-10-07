@@ -103,6 +103,8 @@ describe("git credentials", () => {
     await invites.revokeInvite(db, revokedInv, T);
     const expiredInv = await invites.createInvite(db, { label: "e", codeHash: "gc3", accessMs: 1, redeemByAt: T + 1e6, repoIds: [priv.id] }, T - 10);
     await invites.redeemInvite(db, expiredInv, await sha256Hex("inv-expired"), T - 10);
+    const pubInv = await invites.createInvite(db, { label: "p", codeHash: "gc4", accessMs: null, redeemByAt: T + 1e6, repoIds: [pub.id] }, T);
+    await invites.redeemInvite(db, pubInv, await sha256Hex("inv-pub"), T);
 
     const cases: [string, Awaited<ReturnType<typeof repos.findRepoById>>, string | null, "fetch" | "push", string][] = [
       ["public fetch, no creds", pub, null, "fetch", "allow"],
@@ -122,6 +124,7 @@ describe("git credentials", () => {
       ["private fetch, expired invite password", priv, "inv-expired", "fetch", "unauthorized"],
       ["private fetch, invite password", priv, "inv-pass", "fetch", "allow"],
       ["private push, invite password", priv, "inv-pass", "push", "forbidden"],
+      ["public push, invite password that covers it", pub, "inv-pub", "push", "forbidden"],
       ["private push, token", priv, "tok-all", "push", "allow"],
       ["private fetch, token", priv, "tok-all", "fetch", "allow"],
       ["restricted token, wrong repo", priv, "tok-other", "push", "notfound"],

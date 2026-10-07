@@ -31,11 +31,11 @@ export async function decideGitAccess(
   if (op === "fetch" && repo && repo.public_at !== null) return { kind: "allow" };
   if (!password) return { kind: "unauthorized" };
   const hash = await sha256Hex(password);
-  if (repo) {
-    const tokenId = await findValidPushTokenId(db, hash, repo.id, now);
-    if (tokenId) return { kind: "allow", pushTokenId: tokenId };
-    if (await inviteCoversRepoByPassword(db, hash, repo.id, now)) return op === "fetch" ? { kind: "allow" } : { kind: "forbidden" };
-  }
   const valid = (await isValidPushToken(db, hash, now)) || (await isValidInvitePassword(db, hash, now));
-  return valid ? { kind: "notfound" } : { kind: "unauthorized" };
+  if (!valid) return { kind: "unauthorized" };
+  if (!repo) return { kind: "notfound" };
+  const tokenId = await findValidPushTokenId(db, hash, repo.id, now);
+  if (tokenId) return { kind: "allow", pushTokenId: tokenId };
+  if (await inviteCoversRepoByPassword(db, hash, repo.id, now)) return op === "fetch" ? { kind: "allow" } : { kind: "forbidden" };
+  return { kind: "notfound" };
 }

@@ -547,6 +547,10 @@ describe("actions on missing or deleted things", () => {
     expect([row.name, row.description, row.public_at, row.deleted_at !== null]).toEqual(["nf-gone", null, null, true]);
     expect(await hooks.listWebhooks(env.DB, id)).toEqual([]);
   });
+  it("direct push 404s on a repo that was never created", async () => {
+    const pending = await repos.insertRepo(env.DB, { name: "nf-pending", description: null }, Date.now());
+    expect((await call("POST", `/admin/repos/${pending.id}/direct-push`, {})).status).toBe(404);
+  });
   it("restore 404s unless the repo is deleted", async () => {
     const id = await newRepo("nf-live");
     expect((await call("POST", `/admin/repos/${id}/restore`, {})).status).toBe(404);
