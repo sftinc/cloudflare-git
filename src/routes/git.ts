@@ -4,7 +4,7 @@ import { forgetRepoAccess, getRepoAccess } from "../artifacts";
 import { basicPassword, decideGitAccess } from "../auth/git-auth";
 import { findLiveAlias, findLiveRepo } from "../db/repos";
 import { touchPushToken } from "../db/tokens";
-import { CommandParser, ReportParser, encodePkt, prependOnce, tap } from "../git/pktline";
+import { CommandParser, ReportParser, encodePkt, prependOnce, rewriteFatal, tap } from "../git/pktline";
 import { cloneUrl } from "../render/paths";
 import { siteOrigin } from "../lib/site";
 import { deliverWebhooks, pushEventsFrom } from "../webhooks";
@@ -13,6 +13,12 @@ type Service = "git-upload-pack" | "git-receive-pack";
 
 const REPO = "/r/:repo{[a-z0-9][a-z0-9-]*\\.git}";
 const FORWARD = ["content-type", "accept", "git-protocol", "content-encoding", "user-agent"];
+
+/** Fatal messages Artifacts sends on side-band 3, shown by git as "remote: ...". Artifacts does not name the file, so neither do we. */
+const PUSH_ERRORS = {
+  artifacts_git_receive_pack_object_too_large:
+    "A file in this push is over the 32 MB per-file limit. Remove it from the commits (for example with git filter-repo) and push again.",
+};
 
 export const gitRoutes = new Hono<AppEnv>();
 
@@ -49,7 +55,7 @@ async function proxy(c: Context<AppEnv>, service: Service, upstreamPath: string)
   const isPush = service === "git-receive-pack" && c.req.method === "POST";
   const commands = new CommandParser();
   let body = c.req.raw.body;
-  // A compressed push is forwarded untouched; parsing (and so webhooks) is skipped.
+  // A compressed push body is forwarded untouched; parsing (and so webhooks) is skipped.
   const parsePush = isPush && body !== null && !c.req.header("content-encoding");
   if (parsePush && body) body = body.pipeThrough(tap((chunk) => commands.push(chunk)));
 
@@ -61,7 +67,9 @@ async function proxy(c: Context<AppEnv>, service: Service, upstreamPath: string)
     return c.text("Storage unavailable", 502);
   }
   const resHeaders = { "Content-Type": upstream.headers.get("content-type") ?? "application/octet-stream", "Cache-Control": "no-cache" };
-  if (!parsePush || !upstream.body) return new Response(upstream.body, { headers: resHeaders });
+  if (!parsePush || !upstream.body) {
+    return new Response(isPush ? upstream.body?.pipeThrough(rewriteFatal(PUSH_ERRORS)) : upstream.body, { headers: resHeaders });
+  }
 
   // Upstream may send headers before it has read the push body, so wait for the
   // first response chunk (the report comes after the whole push) to read the commands.
@@ -79,7 +87,8 @@ async function proxy(c: Context<AppEnv>, service: Service, upstreamPath: string)
         return report.push(chunk);
       }, ended),
     )
-    .pipeThrough(prependOnce(() => (!live && commands.done && sideBand() ? movedNotice(cloneUrl(siteOrigin(c), repo.name)) : null)));
+    .pipeThrough(prependOnce(() => (!live && commands.done && sideBand() ? movedNotice(cloneUrl(siteOrigin(c), repo.name)) : null)))
+    .pipeThrough(rewriteFatal(PUSH_ERRORS));
   c.executionCtx.waitUntil(
     finished.then(() => {
       if (!report?.done) {

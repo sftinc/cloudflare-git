@@ -177,3 +177,51 @@ export function tap(onChunk: (chunk: Uint8Array) => boolean, onEnd?: () => void)
     },
   });
 }
+
+/**
+ * Pass-through stream that swaps a known fatal side-band message (band 3) for a readable one.
+ * It frames packets itself because PktReader.push throws mid-loop and drops packets it already parsed.
+ * Complete packets are forwarded as their original bytes; an incomplete one is held until the rest arrives.
+ * After a framing error the rest of the stream passes through raw, unparsed.
+ */
+export function rewriteFatal(messages: Record<string, string>): TransformStream<Uint8Array, Uint8Array> {
+  let pending: Uint8Array = new Uint8Array(0);
+  let rawRest = false;
+  return new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      if (rawRest) {
+        controller.enqueue(chunk);
+        return;
+      }
+      let buf = chunk;
+      if (pending.length) {
+        buf = new Uint8Array(pending.length + chunk.length);
+        buf.set(pending);
+        buf.set(chunk, pending.length);
+      }
+      let off = 0;
+      while (buf.length - off >= 4) {
+        const hex = dec.decode(buf.subarray(off, off + 4));
+        const len = /^[0-9a-f]{4}$/i.test(hex) ? parseInt(hex, 16) : -1;
+        if (len < 0 || (len > 0 && len < 4)) {
+          rawRest = true;
+          break;
+        }
+        const size = len === 0 ? 4 : len; // 0000 is a flush packet
+        if (buf.length - off < size) break;
+        const pkt = buf.subarray(off, off + size);
+        const text = pkt.length > 4 && pkt[4] === 3 ? dec.decode(pkt.subarray(5)).trim() : null;
+        controller.enqueue(text !== null && Object.hasOwn(messages, text) ? enc.encode(encodePkt(`\x03${messages[text]}\n`)) : pkt);
+        off += size;
+      }
+      const rest = buf.subarray(off);
+      if (rawRest) {
+        controller.enqueue(rest);
+        pending = new Uint8Array(0);
+      } else pending = rest;
+    },
+    flush(controller) {
+      if (pending.length) controller.enqueue(pending);
+    },
+  });
+}

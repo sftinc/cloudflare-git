@@ -146,6 +146,26 @@ describe("push", () => {
     expect(upstream.filter((r) => r.url.startsWith("https://hooks.test/"))).toHaveLength(0);
   });
 
+  it("rewrites a known fatal error from upstream, also for a compressed push", async () => {
+    vi.restoreAllMocks();
+    const fatal = encodePkt("\x03artifacts_git_receive_pack_object_too_large\n");
+    stubFetch(async (req) => {
+      if (!req.url.startsWith("https://fake.artifacts.test/")) return undefined;
+      await req.arrayBuffer();
+      return new Response(fatal, { headers: { "Content-Type": "application/x-git-receive-pack-result" } });
+    });
+    const want = encodePkt("\x03A file in this push is over the 32 MB per-file limit. Remove it from the commits (for example with git filter-repo) and push again.\n");
+    for (const [body, extra] of [[pushBody(), {}], ["\x1f\x8b-not-gzip", { "Content-Encoding": "gzip" }]] as const) {
+      const { res, done } = await request("/r/priv.git/git-receive-pack", {
+        method: "POST",
+        headers: { ...auth("tok"), "Content-Type": "application/x-git-receive-pack-request", ...extra },
+        body,
+      }, e());
+      expect(await res.text()).toBe(want);
+      await done();
+    }
+  });
+
   it("an unparseable report fires no webhooks", async () => {
     vi.restoreAllMocks();
     upstream = [];

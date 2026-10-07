@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CommandParser, PktReader, ReportParser, ZERO_SHA, encodePkt, parseRefAdvertisement, tap } from "../src/git/pktline";
+import { CommandParser, PktReader, ReportParser, ZERO_SHA, encodePkt, parseRefAdvertisement, rewriteFatal, tap } from "../src/git/pktline";
 import { pushFixtures } from "./fixtures/git/pushes";
 import { refAdvertisement } from "./helpers/git-http";
 
@@ -123,5 +123,51 @@ describe("tap", () => {
     const source = new ReadableStream<Uint8Array>({ start(c) { c.enqueue(enc.encode("ab")); c.enqueue(enc.encode("cd")); c.close(); } });
     const out = source.pipeThrough(tap(() => { throw new Error("boom"); }));
     expect(await new Response(out).text()).toBe("abcd");
+  });
+});
+
+describe("rewriteFatal", () => {
+  const CODE = "artifacts_git_receive_pack_object_too_large";
+  const MSG = "Too big.";
+  const join = (...parts: Uint8Array[]) => Uint8Array.from(parts.flatMap((p) => [...p]));
+  /** One packet: 4-hex length, band byte, payload. */
+  const band = (n: number, payload: string | Uint8Array) => {
+    const body = typeof payload === "string" ? enc.encode(payload) : payload;
+    return join(enc.encode((body.length + 5).toString(16).padStart(4, "0")), Uint8Array.of(n), body);
+  };
+  const fatal = band(3, `${CODE}\n`);
+  const rewritten = enc.encode(encodePkt(`\x03${MSG}\n`));
+  const FLUSH = enc.encode("0000");
+  const run = async (bytes: Uint8Array, sizes = [bytes.length]) => {
+    const source = new ReadableStream<Uint8Array>({ start(c) { for (const ch of chunks(bytes, sizes)) c.enqueue(ch); c.close(); } });
+    return new Uint8Array(await new Response(source.pipeThrough(rewriteFatal({ [CODE]: MSG }))).arrayBuffer());
+  };
+
+  it.each([[[1000]], [[1]], [[7, 3]]])("rewrites the known code, even split across chunks %j", async (sizes) => {
+    expect(await run(join(band(1, "data"), fatal, FLUSH), sizes)).toEqual(join(band(1, "data"), rewritten, FLUSH));
+  });
+  it("forwards everything else byte for byte", async () => {
+    const input = join(
+      band(3, "some_other_code\n"), band(3, "constructor\n"), band(1, "pack"),
+      band(2, Uint8Array.of(0xff, 0xfe, 0x00)), band(3, Uint8Array.of(0xff, 0xfe)), FLUSH,
+    );
+    for (const sizes of [[input.length], [1], [6]]) expect(await run(input, sizes)).toEqual(input);
+  });
+  it("handles the largest packet in small chunks", async () => {
+    const big = band(1, new Uint8Array(65_515).fill(7)); // 65520 bytes: the largest legal packet
+    expect(await run(join(big, fatal), [4096])).toEqual(join(big, rewritten));
+    expect(await run(join(big, fatal), [1])).toEqual(join(big, rewritten));
+  });
+  it.each(["zzzz", "0001", "0002", "0003"])("a bad header (%s) stops parsing: a later fatal packet is not rewritten", async (bad) => {
+    const input = join(band(1, "first"), band(2, "second"), enc.encode(bad), fatal);
+    for (const sizes of [[input.length], [5], [3, 11]]) expect(await run(input, sizes)).toEqual(input);
+  });
+  it("keeps what it already rewrote when framing breaks, then passes the rest through raw", async () => {
+    const tail = join(enc.encode("zzzz"), fatal);
+    expect(await run(join(fatal, tail), [5])).toEqual(join(rewritten, tail));
+  });
+  it.each([["a partial header", "00"], ["a partial payload", "000aab"]])("forwards %s at end of stream unchanged", async (_name, tail) => {
+    const input = join(band(1, "x"), enc.encode(tail));
+    expect(await run(input, [3])).toEqual(input);
   });
 });
