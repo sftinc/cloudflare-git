@@ -1,4 +1,5 @@
 import { artifactsErrorCode } from "./artifacts";
+import { DAY_MS } from "./purge";
 import { findAlias, findRepoByName, insertRepo, markProvisioned, retireRepo, type RepoRow } from "./db/repos";
 
 export type ProvisionInput =
@@ -40,6 +41,11 @@ export function aliasWarning(name: string, owner: string) {
   return `"${name}" is an old name of repo "${owner}": links and clones using "${name}" still reach "${owner}". Taking the name breaks them right away, even if the create or import then fails.`;
 }
 
+/** Spec §4: a deleted repo past its restore window keeps its name until the hourly purge frees it. */
+export function beingPurged(name: string) {
+  return `A deleted repo named "${name}" is being permanently deleted. Pick another name, or try again tomorrow.`;
+}
+
 function checkInput(input: ProvisionInput): ProvisionResult | null {
   const nameError = validateRepoName(input.name);
   if (nameError) return { ok: false, error: nameError };
@@ -66,12 +72,15 @@ function checkInput(input: ProvisionInput): ProvisionResult | null {
  * pending create or import and holds its name. On any outcome but "ready" or "pending" this request
  * retires the row, giving the name back; resubmitting is the retry, with a fresh row and fresh storage.
  */
-export async function provisionRepo(db: D1Database, art: Artifacts, input: ProvisionInput, now: number): Promise<ProvisionResult> {
+export async function provisionRepo(db: D1Database, art: Artifacts, input: ProvisionInput, now: number, restoreDays: number): Promise<ProvisionResult> {
   const invalid = checkInput(input);
   if (invalid) return invalid;
   const existing = await findRepoByName(db, input.name);
   if (existing) {
-    if (existing.deleted_at !== null) return { ok: false, error: `A deleted repo named "${input.name}" exists. Restore it instead.`, restoreId: existing.id };
+    if (existing.deleted_at !== null) {
+      if (existing.deleted_at <= now - restoreDays * DAY_MS) return { ok: false, error: beingPurged(input.name) };
+      return { ok: false, error: `A deleted repo named "${input.name}" exists. Restore it instead.`, restoreId: existing.id };
+    }
     if (existing.provisioned_at === null) return { ok: false, error: `"${input.name}" is still being imported.` };
     return { ok: false, error: `A repo named "${input.name}" already exists.` };
   }

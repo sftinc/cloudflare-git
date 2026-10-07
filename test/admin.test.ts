@@ -635,7 +635,7 @@ describe("confirming delete and make-public", () => {
     expect(html).toContain('<button type="button" class="danger" data-dialog="delete-repo">Delete this repo</button>');
     expect(html).toContain('<dialog id="delete-repo"');
     expect(html).toContain("Delete repo &quot;cf-page&quot;?");
-    expect(html).toContain("Its pages and clone URL will return 404 and its webhooks stop. You can restore it from the admin list.");
+    expect(html).toContain("Its pages and clone URL will return 404 and its webhooks stop. You can restore it from the admin list for 30 days.");
     expect(html).toContain('data-must="DELETE"');
     expect(html).toContain('<dialog id="make-public"');
     expect(html.match(/name="ack"/g)).toHaveLength(3);
@@ -817,6 +817,61 @@ describe("restore window", () => {
     expect((await repos.findRepoById(env.DB, live))!.deleted_at).toBeNull();
     expect((await repos.findRepoById(env.DB, pending.id))!.deleted_at).toBeNull();
     expect((await repos.findRepoById(env.DB, purged))!.deleted_at).not.toBeNull();
+  });
+});
+
+describe("deleted names and the delete wording", () => {
+  const newRepo = async (name: string) => (await call("POST", "/admin/repos", { name })).location!.split("/").pop()!;
+  const rename = (id: string, name: string) => call("POST", `/admin/repos/${id}/rename`, { name });
+  const PURGING = (name: string) => `A deleted repo named &quot;${name}&quot; is being permanently deleted. Pick another name, or try again tomorrow.`;
+
+  it("the delete dialog and the danger zone say how long a restore is possible", async () => {
+    const id = await newRepo("dw-words");
+    const html = (await call("GET", `/admin/repos/${id}`)).html;
+    expect(html).toContain("You can restore it from the Repos page for 30 days.");
+    expect(html).toContain("Its pages and clone URL will return 404 and its webhooks stop. You can restore it from the admin list for 30 days.");
+    extraEnv = { RESTORE_DAYS: "1" };
+    const one = (await call("GET", `/admin/repos/${id}`)).html;
+    expect(one).toContain("You can restore it from the Repos page for 1 day.");
+    expect(one).toContain("You can restore it from the admin list for 1 day.");
+    extraEnv = { RESTORE_DAYS: "0" };
+    const zero = (await call("GET", `/admin/repos/${id}`)).html;
+    expect(zero).toContain("This can&#39;t be undone.");
+    expect(zero).toContain("Its pages and clone URL will return 404 and its webhooks stop. It can&#39;t be restored.");
+    expect(zero).not.toContain("You can restore it");
+  });
+
+  it("create, import and rename offer Restore only for a repo inside the window", async () => {
+    const recent = await newRepo("dn-recent");
+    await call("POST", `/admin/repos/${recent}/delete`, DELETE_FORM);
+    const old = await newRepo("dn-old");
+    await repos.setDeleted(env.DB, old, true, Date.now() - 31 * DAY_MS);
+    const other = await newRepo("dn-other");
+
+    const offer = await call("POST", "/admin/repos", { name: "dn-recent" });
+    expect(offer.html).toContain("A deleted repo named &quot;dn-recent&quot; exists. Restore it instead.");
+    expect(offer.html).toContain(`/admin/repos/${recent}/restore`);
+    for (const r of [await call("POST", "/admin/repos", { name: "dn-old" }), await call("POST", "/admin/import", { name: "dn-old", url: "https://github.com/a/b" })]) {
+      expect(r.status).toBe(422);
+      expect(r.html).toContain(PURGING("dn-old"));
+      expect(r.html).not.toContain(`/admin/repos/${old}/restore`);
+    }
+    const renamedOld = await rename(other, "dn-old");
+    expect([renamedOld.status, renamedOld.html.includes(PURGING("dn-old"))]).toEqual([422, true]);
+    expect((await rename(other, "dn-recent")).html).toContain("A deleted repo is named &quot;dn-recent&quot;. Restore it, or pick another name.");
+    expect((await repos.findRepoById(env.DB, other))!.name).toBe("dn-other");
+  });
+
+  it("a non-default window reaches create and rename", async () => {
+    const id = await newRepo("dn-seven");
+    await repos.setDeleted(env.DB, id, true, Date.now() - 8 * DAY_MS);
+    const other = await newRepo("dn-seven-b");
+    extraEnv = { RESTORE_DAYS: "7" };
+    expect((await call("POST", "/admin/repos", { name: "dn-seven" })).html).toContain(PURGING("dn-seven"));
+    expect((await rename(other, "dn-seven")).html).toContain(PURGING("dn-seven"));
+    extraEnv = {};
+    expect((await call("POST", "/admin/repos", { name: "dn-seven" })).html).toContain("Restore it instead.");
+    expect((await rename(other, "dn-seven")).html).toContain("Restore it, or pick another name.");
   });
 });
 

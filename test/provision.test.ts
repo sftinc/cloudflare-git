@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:test";
+import { DAY_MS } from "../src/purge";
 import { provisionRepo, refreshProvisioning, validateRepoName } from "../src/provision";
 import * as repos from "../src/db/repos";
 import { FakeArtifacts } from "./helpers/fake-artifacts";
@@ -20,7 +21,7 @@ describe("validateRepoName", () => {
 describe("provisionRepo", () => {
   it("creates in Artifacts and marks the row provisioned", async () => {
     const f = new FakeArtifacts();
-    const r = await provisionRepo(env.DB, art(f), { ...create("p1"), defaultBranch: "develop" }, 1);
+    const r = await provisionRepo(env.DB, art(f), { ...create("p1"), defaultBranch: "develop" }, 1, 30);
     expect(r.ok && r.status).toBe("ready");
     if (!r.ok) throw new Error(r.error);
     expect(r.repo.storage_name).toBe(r.repo.id);
@@ -32,12 +33,12 @@ describe("provisionRepo", () => {
     quiet();
     const f = new FakeArtifacts();
     f.failNext = { method: "create", code: "INTERNAL_ERROR" };
-    const first = await provisionRepo(env.DB, art(f), { ...create("p2"), description: "first try" }, 1);
+    const first = await provisionRepo(env.DB, art(f), { ...create("p2"), description: "first try" }, 1, 30);
     expect(!first.ok && first.error).toBe("Artifacts couldn't create the repo (INTERNAL_ERROR). Try again.");
     expect(await repos.findRepoByName(env.DB, "p2")).toBeNull();
     const old = (await env.DB.prepare("SELECT * FROM repos WHERE description = 'first try'").first<repos.RepoRow>())!;
     expect([old.name, old.deleted_at, old.provisioned_at]).toEqual([`~${old.id}`, 1, null]);
-    const second = await provisionRepo(env.DB, art(f), { ...create("p2"), description: "second try" }, 2);
+    const second = await provisionRepo(env.DB, art(f), { ...create("p2"), description: "second try" }, 2, 30);
     if (!second.ok) throw new Error(second.error);
     expect(second.repo.id).not.toBe(old.id);
     expect(second.repo.storage_name).not.toBe(old.storage_name);
@@ -48,7 +49,7 @@ describe("provisionRepo", () => {
     quiet();
     const f = new FakeArtifacts();
     f.failNext = { method: "create", code: "ALREADY_EXISTS" };
-    const r = await provisionRepo(env.DB, art(f), create("p3"), 1);
+    const r = await provisionRepo(env.DB, art(f), create("p3"), 1, 30);
     expect(r.ok).toBe(false);
     expect(await repos.findRepoByName(env.DB, "p3")).toBeNull();
   });
@@ -57,7 +58,7 @@ describe("provisionRepo", () => {
     const f = new FakeArtifacts();
     // renamed before storage names were ids: its files are still under its first name
     await env.DB.prepare("INSERT INTO repos (id, name, storage_name, created_at, updated_at) VALUES ('x1', 'new-name', 'old-name', 1, 1)").run();
-    const r = await provisionRepo(env.DB, art(f), create("old-name"), 2);
+    const r = await provisionRepo(env.DB, art(f), create("old-name"), 2, 30);
     if (!r.ok) throw new Error(r.error);
     expect(r.repo.storage_name).toBe(r.repo.id);
     expect(f.repos.has(r.repo.id)).toBe(true);
@@ -66,24 +67,39 @@ describe("provisionRepo", () => {
 
   it("rejects names used by provisioned or deleted repos", async () => {
     const f = new FakeArtifacts();
-    await provisionRepo(env.DB, art(f), create("p4"), 1);
-    const dup = await provisionRepo(env.DB, art(f), create("p4"), 2);
+    await provisionRepo(env.DB, art(f), create("p4"), 1, 30);
+    const dup = await provisionRepo(env.DB, art(f), create("p4"), 2, 30);
     expect(dup.ok).toBe(false);
     const row = (await repos.findRepoByName(env.DB, "p4"))!;
     await repos.setDeleted(env.DB, row.id, true, 3);
-    const del = await provisionRepo(env.DB, art(f), create("p4"), 4);
+    const del = await provisionRepo(env.DB, art(f), create("p4"), 4, 30);
     expect(!del.ok && del.restoreId).toBe(row.id);
   });
 
+  it("offers Restore only inside the window; past it the name is being purged", async () => {
+    const f = new FakeArtifacts();
+    const made = await provisionRepo(env.DB, art(f), create("p13"), 1, 30);
+    if (!made.ok) throw new Error(made.error);
+    await repos.setDeleted(env.DB, made.repo.id, true, 2);
+    const purging = { ok: false, error: 'A deleted repo named "p13" is being permanently deleted. Pick another name, or try again tomorrow.' };
+    const inside = await provisionRepo(env.DB, art(f), create("p13"), 2 + 30 * DAY_MS - 1, 30);
+    expect(!inside.ok && [inside.error, inside.restoreId]).toEqual(['A deleted repo named "p13" exists. Restore it instead.', made.repo.id]);
+    expect(await provisionRepo(env.DB, art(f), create("p13"), 2 + 30 * DAY_MS, 30)).toEqual(purging);
+    expect(await provisionRepo(env.DB, art(f), imp("p13"), 2 + 30 * DAY_MS, 30)).toEqual(purging);
+    expect(await provisionRepo(env.DB, art(f), create("p13"), 3, 0)).toEqual(purging);
+    expect(await provisionRepo(env.DB, art(f), create("p13"), 2 + 7 * DAY_MS, 7)).toEqual(purging);
+    expect((await repos.findRepoByName(env.DB, "p13"))!.id).toBe(made.repo.id);
+  });
+
   it("refuses import URLs with credentials and clears them", async () => {
-    const r = await provisionRepo(env.DB, art(new FakeArtifacts()), { kind: "import", name: "p5", description: "", url: "https://user:tok@github.com/a/b", branch: "" }, 1);
+    const r = await provisionRepo(env.DB, art(new FakeArtifacts()), { kind: "import", name: "p5", description: "", url: "https://user:tok@github.com/a/b", branch: "" }, 1, 30);
     expect(!r.ok && r.clearUrl).toBe(true);
     expect(await repos.findRepoByName(env.DB, "p5")).toBeNull();
   });
 
   it("imports stay pending until Artifacts is ready", async () => {
     const f = new FakeArtifacts();
-    const r = await provisionRepo(env.DB, art(f), { kind: "import", name: "p6", description: "", url: "https://github.com/a/b", branch: "" }, 1);
+    const r = await provisionRepo(env.DB, art(f), { kind: "import", name: "p6", description: "", url: "https://github.com/a/b", branch: "" }, 1, 30);
     expect(r.ok && r.status).toBe("pending");
     const row = (await repos.findRepoByName(env.DB, "p6"))!;
     f.finishImport(row.storage_name);
@@ -93,9 +109,9 @@ describe("provisionRepo", () => {
 
   it("a pending import holds its name", async () => {
     const f = new FakeArtifacts();
-    const r = await provisionRepo(env.DB, art(f), imp("p8"), 1);
+    const r = await provisionRepo(env.DB, art(f), imp("p8"), 1, 30);
     expect(r.ok && r.status).toBe("pending");
-    const again = await provisionRepo(env.DB, art(f), create("p8"), 2);
+    const again = await provisionRepo(env.DB, art(f), create("p8"), 2, 30);
     expect(!again.ok && again.error).toBe('"p8" is still being imported.');
   });
 
@@ -110,10 +126,10 @@ describe("provisionRepo", () => {
     const f = new FakeArtifacts();
     f.failNext = { method: "get", code: "INTERNAL_ERROR" }; // the import started, then the check failed
     const one = "https://example.com/one.git";
-    expect((await provisionRepo(env.DB, art(f), imp("p9", { url: one, description: one }), 1)).ok).toBe(false);
+    expect((await provisionRepo(env.DB, art(f), imp("p9", { url: one, description: one }), 1, 30)).ok).toBe(false);
     const first = (await env.DB.prepare("SELECT * FROM repos WHERE description = ?").bind(one).first<repos.RepoRow>())!;
     expect(f.repos.has(first.storage_name)).toBe(true); // left behind in Artifacts
-    const second = await provisionRepo(env.DB, art(f), imp("p9", { url: "https://example.com/two.git" }), 2);
+    const second = await provisionRepo(env.DB, art(f), imp("p9", { url: "https://example.com/two.git" }), 2, 30);
     if (!second.ok) throw new Error(second.error);
     expect(second.repo.id).not.toBe(first.id);
     expect(second.repo.storage_name).not.toBe(first.storage_name);
@@ -123,10 +139,10 @@ describe("provisionRepo", () => {
     quiet();
     const f = new FakeArtifacts();
     f.failNext = { method: "import", code: "NOT_FOUND" };
-    const withBranch = await provisionRepo(env.DB, art(f), imp("p10", { branch: "dev" }), 1);
+    const withBranch = await provisionRepo(env.DB, art(f), imp("p10", { branch: "dev" }), 1, 30);
     expect(!withBranch.ok && withBranch.error).toBe('Nothing was found at that URL, or it has no branch "dev".');
     f.failNext = { method: "import", code: "NOT_FOUND" };
-    const without = await provisionRepo(env.DB, art(f), imp("p11"), 1);
+    const without = await provisionRepo(env.DB, art(f), imp("p11"), 1, 30);
     expect(!without.ok && without.error).toBe("No repository was found at that URL.");
   });
 });

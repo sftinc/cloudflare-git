@@ -305,7 +305,10 @@ export function AdminRepo(props: {
                 : <button type="button" class="danger" data-dialog="make-public">Make public</button>}
             </div>
             <div class="row">
-              <div class="row-text"><strong>Delete this repo</strong><span>You can restore it later from the Repos page.</span></div>
+              <div class="row-text">
+                <strong>Delete this repo</strong>
+                <span>{props.restoreDays === 0 ? "This can't be undone." : `You can restore it from the Repos page for ${plural(props.restoreDays, "day")}.`}</span>
+              </div>
               <button type="button" class="danger" data-dialog="delete-repo">Delete this repo</button>
             </div>
           </>
@@ -330,7 +333,7 @@ export function AdminRepo(props: {
         <dialog id="delete-repo" class="confirm" aria-labelledby="delete-repo-title">
           <form method="post" action={`/admin/repos/${r.id}/delete`} class="stack" data-confirm>
             <h2 id="delete-repo-title">Delete repo "{r.name}"?</h2>
-            <p>Its pages and clone URL will return 404 and its webhooks stop. You can restore it from the admin list.</p>
+            <p>{`Its pages and clone URL will return 404 and its webhooks stop. ${props.restoreDays === 0 ? "It can't be restored." : `You can restore it from the admin list for ${plural(props.restoreDays, "day")}.`}`}</p>
             <label>Type DELETE to confirm<input type="text" name="confirm" autocomplete="off" required data-must="DELETE" /></label>
             <div class="dialog-actions">
               <button type="button" data-close>Cancel</button>

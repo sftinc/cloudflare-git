@@ -7,7 +7,7 @@ import { createInvite, deleteInvite, inviteStatus, listInvites, revokeInvite } f
 import { createPushToken, deletePushToken, listPushTokens, revokePushToken } from "../db/tokens";
 import { createWebhook, deleteWebhook, listWebhooks } from "../db/webhooks";
 import { randomSecret, sha256Hex } from "../lib/crypto";
-import { aliasWarning, DESCRIPTION_MAX, provisionRepo, refreshProvisioning, validateRepoName, type ProvisionInput, type ProvisionStatus } from "../provision";
+import { aliasWarning, beingPurged, DESCRIPTION_MAX, provisionRepo, refreshProvisioning, validateRepoName, type ProvisionInput, type ProvisionStatus } from "../provision";
 import { cloneUrl } from "../render/paths";
 import { DAY_MS, restoreDays } from "../purge";
 import { plural } from "../views/public";
@@ -90,7 +90,7 @@ async function reposPage(c: Context<AppEnv>) {
 }
 
 async function provision(c: Context<AppEnv>, input: ProvisionInput, values: RepoFormValues) {
-  const result = await provisionRepo(c.env.DB, c.env.ARTIFACTS, input, Date.now());
+  const result = await provisionRepo(c.env.DB, c.env.ARTIFACTS, input, Date.now(), restoreDays(c.env));
   if (result.ok) {
     await setPublic(c.env.DB, result.repo.id, values.visibility === "public", Date.now());
     return c.redirect(`/admin/repos/${result.repo.id}`, 303);
@@ -150,7 +150,8 @@ adminRoutes.post("/repos/:id/rename", async (c) => {
   const taken = await findRepoByName(c.env.DB, name);
   if (taken && taken.id !== repo.id) {
     const error =
-      taken.deleted_at !== null ? `A deleted repo is named "${name}". Restore it, or pick another name.`
+      taken.deleted_at !== null && taken.deleted_at <= Date.now() - restoreDays(c.env) * DAY_MS ? beingPurged(name)
+      : taken.deleted_at !== null ? `A deleted repo is named "${name}". Restore it, or pick another name.`
       : taken.provisioned_at === null ? `"${name}" is still being imported.`
       : `A repo named "${name}" already exists.`;
     return repoPage(c, { error, name }, 422);
