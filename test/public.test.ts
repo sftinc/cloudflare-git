@@ -191,6 +191,7 @@ describe("repo pages", () => {
     expect(status).toBe(200);
     expect(body).toContain("This repo is empty");
     expect(body).toContain("git init");
+    expect(body).toContain('aria-label="Copy commands"');
     expect(body).toContain('<aside class="about">');
   });
   it("branches with slashes and encoded paths work", async () => {

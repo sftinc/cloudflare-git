@@ -158,6 +158,13 @@ function FileTree(props: { repo: string; branch: string; levels: ArtifactsTreeEn
   );
 }
 
+const Commands = (props: { text: string }) => (
+  <div class="commands">
+    <pre class="code"><code>{props.text}</code></pre>
+    <button type="button" class="btn" data-copy={props.text} aria-label="Copy commands" title="Copy"><Copy /></button>
+  </div>
+);
+
 export function EmptyRepo(props: { repo: RepoRow; head: string | null; info: ArtifactsRepoInfo; cloneUrl: string; now: number }) {
   const { repo, cloneUrl } = props;
   return (
@@ -171,9 +178,9 @@ export function EmptyRepo(props: { repo: RepoRow; head: string | null; info: Art
               <p class="muted">Push your first commit to see its files here.</p>
             </div>
             <h3>Create a new repository on the command line</h3>
-            <pre class="code"><code>{`echo "# ${repo.name}" >> README.md\ngit init\ngit add README.md\ngit commit -m "first commit"\ngit branch -M main\ngit remote add origin ${cloneUrl}\ngit push -u origin main`}</code></pre>
+            <Commands text={`echo "# ${repo.name}" >> README.md\ngit init\ngit add README.md\ngit commit -m "first commit"\ngit branch -M main\ngit remote add origin ${cloneUrl}\ngit push -u origin main`} />
             <h3>…or push an existing repository from the command line</h3>
-            <pre class="code"><code>{`git remote add origin ${cloneUrl}\ngit branch -M main\ngit push -u origin main`}</code></pre>
+            <Commands text={`git remote add origin ${cloneUrl}\ngit branch -M main\ngit push -u origin main`} />
           </section>
         </div>
         <About repo={repo} branch="" head={props.head} readmeName={null} info={props.info} cloneUrl={cloneUrl} now={props.now} />

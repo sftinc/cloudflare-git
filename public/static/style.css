@@ -207,6 +207,8 @@ a.entry:hover { text-decoration: none; background: var(--code-bg); color: var(--
 .empty-head h2 { display: flex; align-items: center; gap: 8px; font-size: 18px; margin: 0 0 4px; }
 .empty-head .icon { width: 20px; height: 20px; color: var(--accent); }
 .empty-head p { margin: 0; font-size: 14px; }
+.commands { position: relative; }
+.commands .btn { position: absolute; top: 8px; right: 24px; padding: 5px 8px; }
 .notice { background: var(--notice); padding: 10px 16px; margin: 0; border-bottom: 1px solid var(--border); }
 pre.code { margin: 0; padding: 16px; overflow-x: auto; background: var(--code-bg); line-height: 1.5; }
 .card pre.code { border-radius: 0; }
