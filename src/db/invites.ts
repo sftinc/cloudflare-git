@@ -92,6 +92,12 @@ export async function inviteCoversRepoByPassword(db: D1Database, passwordHash: s
   return row !== null;
 }
 
+/** A redeemed invite's clone password that is not revoked, deleted or expired, whatever repos it covers. */
+export async function isValidInvitePassword(db: D1Database, passwordHash: string, now: number) {
+  const row = await db.prepare(`SELECT 1 AS ok FROM invites i WHERE i.clone_password_hash = ? AND ${VALID}`).bind(passwordHash, now).first();
+  return row !== null;
+}
+
 export async function listInvites(db: D1Database) {
   const { results } = await db
     .prepare(

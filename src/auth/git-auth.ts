@@ -1,9 +1,9 @@
 import { sha256Hex } from "../lib/crypto";
-import { inviteCoversRepoByPassword } from "../db/invites";
+import { inviteCoversRepoByPassword, isValidInvitePassword } from "../db/invites";
 import type { RepoRow } from "../db/repos";
-import { findValidPushTokenId } from "../db/tokens";
+import { findValidPushTokenId, isValidPushToken } from "../db/tokens";
 
-export type GitDecision = { kind: "allow"; pushTokenId?: string } | { kind: "unauthorized" } | { kind: "notfound" };
+export type GitDecision = { kind: "allow"; pushTokenId?: string } | { kind: "unauthorized" } | { kind: "forbidden" } | { kind: "notfound" };
 
 export function basicPassword(header: string | undefined): string | null {
   if (!header?.startsWith("Basic ")) return null;
@@ -17,9 +17,9 @@ export function basicPassword(header: string | undefined): string | null {
 }
 
 /**
- * Spec §4. No credentials → 401 for any name; wrong credentials or no access → 404,
- * except a failed push to a public repo → 401, so git drops the bad stored credential
- * (the repo's existence is public anyway).
+ * Spec §7. git erases a saved password only on a 401, so a credential that is not valid anywhere
+ * gets 401. A valid one without access to this repo (or with no such repo) gets 404; neither answer
+ * depends on whether the repo exists. An invite password pushing to a repo it covers gets 403.
  */
 export async function decideGitAccess(
   db: D1Database,
@@ -30,10 +30,12 @@ export async function decideGitAccess(
 ): Promise<GitDecision> {
   if (op === "fetch" && repo && repo.public_at !== null) return { kind: "allow" };
   if (!password) return { kind: "unauthorized" };
-  if (!repo) return { kind: "notfound" };
   const hash = await sha256Hex(password);
-  const tokenId = await findValidPushTokenId(db, hash, repo.id, now);
-  if (tokenId) return { kind: "allow", pushTokenId: tokenId };
-  if (op === "fetch" && (await inviteCoversRepoByPassword(db, hash, repo.id, now))) return { kind: "allow" };
-  return repo.public_at !== null ? { kind: "unauthorized" } : { kind: "notfound" };
+  if (repo) {
+    const tokenId = await findValidPushTokenId(db, hash, repo.id, now);
+    if (tokenId) return { kind: "allow", pushTokenId: tokenId };
+    if (await inviteCoversRepoByPassword(db, hash, repo.id, now)) return op === "fetch" ? { kind: "allow" } : { kind: "forbidden" };
+  }
+  const valid = (await isValidPushToken(db, hash, now)) || (await isValidInvitePassword(db, hash, now));
+  return valid ? { kind: "notfound" } : { kind: "unauthorized" };
 }

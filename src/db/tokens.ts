@@ -61,3 +61,12 @@ export async function revokePushToken(db: D1Database, id: string, now: number) {
 export async function deletePushToken(db: D1Database, id: string, now: number) {
   await db.prepare("UPDATE push_tokens SET deleted_at = ?1, updated_at = ?1 WHERE id = ?2").bind(now, id).run();
 }
+
+/** A token that is not revoked, deleted or expired, whatever repos it covers. */
+export async function isValidPushToken(db: D1Database, tokenHash: string, now: number) {
+  const row = await db
+    .prepare("SELECT 1 AS ok FROM push_tokens WHERE token_hash = ?1 AND revoked_at IS NULL AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > ?2)")
+    .bind(tokenHash, now)
+    .first();
+  return row !== null;
+}

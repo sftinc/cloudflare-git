@@ -93,21 +93,35 @@ describe("git credentials", () => {
     const pub = await live("g-pub", true), priv = await live("g-priv", false), other = await live("g-other", false);
     await tokens.createPushToken(db, { name: "all", tokenHash: await sha256Hex("tok-all"), repoIds: [], allRepos: true }, T);
     await tokens.createPushToken(db, { name: "other-only", tokenHash: await sha256Hex("tok-other"), repoIds: [other.id] }, T);
+    await tokens.createPushToken(db, { name: "old", tokenHash: await sha256Hex("tok-expired"), repoIds: [], allRepos: true, expiresAt: T - 1 }, T - 10);
+    const revokedTok = await tokens.createPushToken(db, { name: "gone", tokenHash: await sha256Hex("tok-revoked"), repoIds: [], allRepos: true }, T);
+    await tokens.revokePushToken(db, revokedTok, T);
     const inv = await invites.createInvite(db, { label: "f", codeHash: "gc1", accessMs: null, redeemByAt: T + 1e6, repoIds: [priv.id] }, T);
     await invites.redeemInvite(db, inv, await sha256Hex("inv-pass"), T);
+    const revokedInv = await invites.createInvite(db, { label: "r", codeHash: "gc2", accessMs: null, redeemByAt: T + 1e6, repoIds: [priv.id] }, T);
+    await invites.redeemInvite(db, revokedInv, await sha256Hex("inv-revoked"), T);
+    await invites.revokeInvite(db, revokedInv, T);
+    const expiredInv = await invites.createInvite(db, { label: "e", codeHash: "gc3", accessMs: 1, redeemByAt: T + 1e6, repoIds: [priv.id] }, T - 10);
+    await invites.redeemInvite(db, expiredInv, await sha256Hex("inv-expired"), T - 10);
 
     const cases: [string, Awaited<ReturnType<typeof repos.findRepoById>>, string | null, "fetch" | "push", string][] = [
       ["public fetch, no creds", pub, null, "fetch", "allow"],
       ["public push, no creds", pub, null, "push", "unauthorized"],
       ["public push, wrong password (git drops stored creds only on 401)", pub, "nope", "push", "unauthorized"],
-      ["public push, invite password", pub, "inv-pass", "push", "unauthorized"],
+      ["public push, invite password that covers another repo", pub, "inv-pass", "push", "notfound"],
       ["public push, token", pub, "tok-all", "push", "allow"],
       ["private fetch, no creds", priv, null, "fetch", "unauthorized"],
       ["unknown repo, no creds", null, null, "fetch", "unauthorized"],
-      ["unknown repo, creds", null, "tok-all", "fetch", "notfound"],
-      ["private fetch, wrong password", priv, "nope", "fetch", "notfound"],
+      ["unknown repo, wrong password", null, "nope", "push", "unauthorized"],
+      ["unknown repo, valid token", null, "tok-all", "fetch", "notfound"],
+      ["unknown repo, valid invite password", null, "inv-pass", "fetch", "notfound"],
+      ["private fetch, wrong password", priv, "nope", "fetch", "unauthorized"],
+      ["private fetch, expired token", priv, "tok-expired", "fetch", "unauthorized"],
+      ["private fetch, revoked token", priv, "tok-revoked", "fetch", "unauthorized"],
+      ["private fetch, revoked invite password", priv, "inv-revoked", "fetch", "unauthorized"],
+      ["private fetch, expired invite password", priv, "inv-expired", "fetch", "unauthorized"],
       ["private fetch, invite password", priv, "inv-pass", "fetch", "allow"],
-      ["private push, invite password", priv, "inv-pass", "push", "notfound"],
+      ["private push, invite password", priv, "inv-pass", "push", "forbidden"],
       ["private push, token", priv, "tok-all", "push", "allow"],
       ["private fetch, token", priv, "tok-all", "fetch", "allow"],
       ["restricted token, wrong repo", priv, "tok-other", "push", "notfound"],

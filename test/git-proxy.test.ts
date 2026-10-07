@@ -5,6 +5,7 @@ import { clearArtifactsCaches } from "../src/artifacts";
 import { sha256Hex } from "../src/lib/crypto";
 import * as repos from "../src/db/repos";
 import * as tokens from "../src/db/tokens";
+import * as invites from "../src/db/invites";
 import * as hooks from "../src/db/webhooks";
 import { FakeArtifacts } from "./helpers/fake-artifacts";
 import { makeEnv, request } from "./helpers/env";
@@ -18,7 +19,7 @@ let fake: FakeArtifacts;
 let upstream: Request[];
 
 async function setup() {
-  for (const t of ["webhooks", "push_token_repos", "push_tokens", "repo_aliases", "repos"]) await env.DB.exec(`DELETE FROM ${t}`);
+  for (const t of ["invite_repos", "invites", "webhooks", "push_token_repos", "push_tokens", "repo_aliases", "repos"]) await env.DB.exec(`DELETE FROM ${t}`);
   fake = new FakeArtifacts();
   for (const name of ["pub", "priv"]) {
     fake.seed(name, { branches: { main: { files: { "a.txt": "a" } } } });
@@ -64,7 +65,8 @@ describe("access", () => {
     ["GET", "/r/priv.git/info/refs?service=git-upload-pack", {}, 401],
     ["GET", "/r/nope.git/info/refs?service=git-upload-pack", {}, 401],
     ["GET", "/r/nope.git/info/refs?service=git-upload-pack", auth("tok"), 404],
-    ["GET", "/r/priv.git/info/refs?service=git-upload-pack", auth("wrong"), 404],
+    ["GET", "/r/nope.git/info/refs?service=git-upload-pack", auth("wrong"), 401],
+    ["GET", "/r/priv.git/info/refs?service=git-upload-pack", auth("wrong"), 401],
     ["GET", "/r/priv.git/info/refs?service=git-upload-pack", auth("tok"), 200],
     ["GET", "/r/pub.git/info/refs?service=git-receive-pack", {}, 401],
     ["GET", "/r/pub.git/info/refs?service=git-receive-pack", auth("tok"), 200],
@@ -82,6 +84,16 @@ describe("access", () => {
     await repos.setDeleted(env.DB, r.id, true, 2);
     const { res } = await request("/r/pub.git/info/refs?service=git-upload-pack", { headers: auth("tok") }, e());
     expect(res.status).toBe(404);
+  });
+
+  it("an invite password can't push: 403 with a reason", async () => {
+    const priv = (await repos.findRepoByName(env.DB, "priv"))!;
+    const id = await invites.createInvite(env.DB, { label: "x", codeHash: "push-c", accessMs: null, redeemByAt: Date.now() + 1e6, repoIds: [priv.id] }, Date.now());
+    await invites.redeemInvite(env.DB, id, await sha256Hex("inv"), Date.now());
+    const { res } = await request("/r/priv.git/info/refs?service=git-receive-pack", { headers: auth("inv") }, e());
+    expect(res.status).toBe(403);
+    expect(await res.text()).toBe("This invite can only clone and fetch.");
+    expect((await request("/r/priv.git/info/refs?service=git-upload-pack", { headers: auth("inv") }, e())).res.status).toBe(200);
   });
 });
 
@@ -272,7 +284,7 @@ describe("old names", () => {
 
   it("gives an alias to a private repo the same 401 and 404 as its current name", async () => {
     await rename("priv", "priv2");
-    for (const [headers, status] of [[{}, 401], [auth("wrong"), 404], [auth("tok"), 200]] as const) {
+    for (const [headers, status] of [[{}, 401], [auth("wrong"), 401], [auth("tok"), 200]] as const) {
       const old = await request("/r/priv.git/info/refs?service=git-upload-pack", { headers }, e());
       const cur = await request("/r/priv2.git/info/refs?service=git-upload-pack", { headers }, e());
       expect([old.res.status, cur.res.status]).toEqual([status, status]);

@@ -42,6 +42,7 @@ async function proxy(c: Context<AppEnv>, service: Service, upstreamPath: string)
   if (decision.kind === "unauthorized") {
     return c.text("Authentication required", 401, { "WWW-Authenticate": 'Basic realm="cloudflare-git"' });
   }
+  if (decision.kind === "forbidden") return c.text("This invite can only clone and fetch.", 403);
   if (decision.kind === "notfound" || !repo) return c.text("Repository not found", 404);
   if (decision.pushTokenId) c.executionCtx.waitUntil(touchPushToken(c.env.DB, decision.pushTokenId, now));
 
