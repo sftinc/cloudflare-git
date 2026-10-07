@@ -12,12 +12,11 @@ export type RepoRow = {
   deleted_at: number | null;
 };
 
+// New repos keep their files under their id, so no name collides with storage. If Artifacts rejected UUIDs: `r${id.replaceAll("-", "")}`.
+const storageNameFor = (id: string) => id;
+
 export function findRepoByName(db: D1Database, name: string) {
   return db.prepare("SELECT * FROM repos WHERE name = ?").bind(name).first<RepoRow>();
-}
-
-export function findRepoByStorageName(db: D1Database, storageName: string) {
-  return db.prepare("SELECT * FROM repos WHERE storage_name = ?").bind(storageName).first<RepoRow>();
 }
 
 export function findRepoById(db: D1Database, id: string) {
@@ -55,7 +54,8 @@ export async function listReposForAdmin(db: D1Database) {
 }
 
 export async function insertRepo(db: D1Database, r: { name: string; description: string | null }, now: number) {
-  const row: RepoRow = { id: uuidv7(now), name: r.name, storage_name: r.name, description: r.description, public_at: null, provisioned_at: null, created_at: now, updated_at: now, deleted_at: null };
+  const id = uuidv7(now);
+  const row: RepoRow = { id, name: r.name, storage_name: storageNameFor(id), description: r.description, public_at: null, provisioned_at: null, created_at: now, updated_at: now, deleted_at: null };
   await db
     .prepare("INSERT INTO repos (id, name, storage_name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
     .bind(row.id, row.name, row.storage_name, row.description, now, now)

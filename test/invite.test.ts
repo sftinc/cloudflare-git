@@ -31,6 +31,7 @@ beforeEach(async () => {
   fake = new FakeArtifacts();
   fake.seed("secret", { branches: { main: { files: { "README.md": "# Secret" } } } });
   const r = await repos.insertRepo(env.DB, { name: "secret", description: null }, 1);
+  await env.DB.prepare("UPDATE repos SET storage_name = name WHERE id = ?").bind(r.id).run(); // seeded by name, like a repo from before storage names were ids
   await repos.markProvisioned(env.DB, r.id, 1);
   privId = r.id;
   stubArtifactsGit(fake);

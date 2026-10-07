@@ -19,6 +19,7 @@ const NAMESPACE = "cloudflare-git-dev";
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const RUN = Date.now().toString(36);
 const NAMES = { pub: `e2e-${RUN}-site`, priv: `e2e-${RUN}-private`, imp: `e2e-${RUN}-import`, old: `e2e-${RUN}-old`, moved: `e2e-${RUN}-moved` };
+const storageNames = new Set(); // new repos keep their files under their id (src/db/repos.ts), so cleanup collects ids
 const checks = [];
 
 function check(name, ok, detail = "") {
@@ -86,6 +87,7 @@ function secretOf(html) {
 async function createRepo(name) {
   const res = await admin("POST", "/admin/repos", { name, description: `E2E ${name}`, defaultBranch: "main" });
   const id = res.status === 303 && res.headers.get("location")?.match(/^\/admin\/repos\/([^/]+)$/)?.[1];
+  if (id) storageNames.add(id);
   check(`create repo ${name}`, !!id, `status ${res.status}`);
   return id;
 }
@@ -576,6 +578,7 @@ async function main() {
   // 12. Import
   const imp = await admin("POST", "/admin/import", { name: NAMES.imp, url: "https://github.com/octocat/Hello-World" });
   const impId = imp.status === 303 && imp.headers.get("location")?.match(/^\/admin\/repos\/([^/]+)$/)?.[1];
+  if (impId) storageNames.add(impId);
   check("import accepted", !!impId, `status ${imp.status}`);
   let ready = false;
   for (const started = Date.now(); Date.now() - started < 120_000 && !ready; ) {
@@ -647,7 +650,7 @@ async function cleanup() {
     } catch {}
   }
   await sleep(1000);
-  let names = new Set(Object.values(NAMES));
+  let names = new Set([...Object.values(NAMES), ...storageNames]);
   try {
     for (const r of JSON.parse(wrangler(["artifacts", "repos", "list", "--namespace", NAMESPACE, "--json"]))) {
       if (r.name.startsWith("e2e-")) names.add(r.name);

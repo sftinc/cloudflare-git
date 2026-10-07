@@ -24,6 +24,7 @@ async function setup() {
   for (const name of ["pub", "priv"]) {
     fake.seed(name, { branches: { main: { files: { "a.txt": "a" } } } });
     const r = await repos.insertRepo(env.DB, { name, description: null }, 1);
+    await env.DB.prepare("UPDATE repos SET storage_name = name WHERE id = ?").bind(r.id).run(); // seeded by name, like a repo from before storage names were ids
     await repos.markProvisioned(env.DB, r.id, 1);
     if (name === "pub") await repos.setPublic(env.DB, r.id, true, 1);
   }

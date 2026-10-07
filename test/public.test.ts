@@ -16,6 +16,7 @@ const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0, 1, 2]);
 
 async function addRepo(name: string, isPublic: boolean) {
   const r = await repos.insertRepo(env.DB, { name, description: `${name} description` }, 1);
+  await env.DB.prepare("UPDATE repos SET storage_name = name WHERE id = ?").bind(r.id).run(); // seeded by name, like a repo from before storage names were ids
   await repos.markProvisioned(env.DB, r.id, 1);
   if (isPublic) await repos.setPublic(env.DB, r.id, true, 1);
 }

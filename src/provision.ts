@@ -1,5 +1,5 @@
 import { artifactsErrorCode } from "./artifacts";
-import { findRepoByName, findRepoByStorageName, insertRepo, markProvisioned, type RepoRow } from "./db/repos";
+import { findRepoByName, insertRepo, markProvisioned, type RepoRow } from "./db/repos";
 
 export type ProvisionInput =
   | { kind: "create"; name: string; description: string; defaultBranch: string }
@@ -55,11 +55,6 @@ export async function provisionRepo(db: D1Database, art: Artifacts, input: Provi
     return existing.deleted_at !== null
       ? { ok: false, error: `A deleted repo named "${input.name}" exists. Restore it instead.`, restoreId: existing.id }
       : { ok: false, error: `A repo named "${input.name}" already exists.` };
-  }
-  if (!existing) {
-    // A renamed repo keeps its old name as its Artifacts name, so that name can't be reused.
-    const holder = await findRepoByStorageName(db, input.name);
-    if (holder) return { ok: false, error: `"${input.name}" is still the storage name of repo "${holder.name}". Pick another name.` };
   }
   const repo = existing ?? (await insertRepo(db, { name: input.name, description: input.description || null }, now));
   try {

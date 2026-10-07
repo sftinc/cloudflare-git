@@ -18,7 +18,9 @@ describe("provisionRepo", () => {
     const f = new FakeArtifacts();
     const r = await provisionRepo(env.DB, art(f), { ...create("p1"), defaultBranch: "develop" }, 1);
     expect(r.ok && r.status).toBe("ready");
-    expect(f.repos.get("p1")?.defaultBranch).toBe("develop");
+    if (!r.ok) throw new Error(r.error);
+    expect(r.repo.storage_name).toBe(r.repo.id);
+    expect(f.repos.get(r.repo.id)?.defaultBranch).toBe("develop");
     expect((await repos.findLiveRepo(env.DB, "p1"))).not.toBeNull();
   });
 
@@ -35,17 +37,20 @@ describe("provisionRepo", () => {
 
   it("treats ALREADY_EXISTS on resubmit as success", async () => {
     const f = new FakeArtifacts();
-    await repos.insertRepo(env.DB, { name: "p3", description: null }, 1); // earlier attempt reached D1 only
-    await f.create("p3"); // ...and Artifacts
+    const row = await repos.insertRepo(env.DB, { name: "p3", description: null }, 1); // earlier attempt reached D1 only
+    await f.create(row.storage_name); // ...and Artifacts
     const r = await provisionRepo(env.DB, art(f), create("p3"), 2);
     expect(r.ok && r.status).toBe("ready");
   });
 
-  it("refuses a name that is another repo's storage name", async () => {
+  it("stores a new repo under its id, so an old repo's storage name doesn't block the name", async () => {
     const f = new FakeArtifacts();
+    // renamed before storage names were ids: its files are still under its first name
     await env.DB.prepare("INSERT INTO repos (id, name, storage_name, created_at, updated_at) VALUES ('x1', 'new-name', 'old-name', 1, 1)").run();
     const r = await provisionRepo(env.DB, art(f), create("old-name"), 2);
-    expect(!r.ok && r.error).toBe('"old-name" is still the storage name of repo "new-name". Pick another name.');
+    if (!r.ok) throw new Error(r.error);
+    expect(r.repo.storage_name).toBe(r.repo.id);
+    expect(f.repos.has(r.repo.id)).toBe(true);
     expect(f.repos.has("old-name")).toBe(false);
   });
 
@@ -82,7 +87,7 @@ describe("provisionRepo", () => {
     const r = await provisionRepo(env.DB, art(f), { kind: "import", name: "p6", description: "", url: "https://github.com/a/b", branch: "" }, 1);
     expect(r.ok && r.status).toBe("pending");
     const row = (await repos.findRepoByName(env.DB, "p6"))!;
-    f.finishImport("p6");
+    f.finishImport(row.storage_name);
     expect(await refreshProvisioning(env.DB, art(f), row, 2)).toBe("ready");
     expect((await repos.findLiveRepo(env.DB, "p6"))).not.toBeNull();
   });

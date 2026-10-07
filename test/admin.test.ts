@@ -74,7 +74,9 @@ describe("repos", () => {
     const r = await call("POST", "/admin/repos", { name: "site", defaultBranch: "main", description: "" });
     expect(r.status).toBe(303);
     expect(r.location).toMatch(/^\/admin\/repos\/[0-9a-f-]{36}$/);
-    expect(fake.repos.has("site")).toBe(true);
+    const id = r.location!.split("/").pop()!;
+    expect((await repos.findRepoById(env.DB, id))!.storage_name).toBe(id);
+    expect(fake.repos.has(id)).toBe(true);
     expect((await call("GET", r.location!)).html).toContain('<span class="badge">Private</span>');
   });
   it("re-renders the form with values and the error on failure", async () => {
@@ -109,7 +111,7 @@ describe("repos", () => {
       expect(r.html).toContain("350 characters or fewer");
       expect(r.html).toContain(`value="${long}"`);
     }
-    expect(fake.repos.has("long-desc")).toBe(false);
+    expect(await repos.findRepoByName(env.DB, "long-desc")).toBeNull();
     expect((await call("POST", "/admin/repos", { name: "ok-desc", description: "x".repeat(350) })).status).toBe(303);
   });
   it("keeps the private choice when the form re-renders", async () => {
@@ -254,7 +256,7 @@ describe("rename", () => {
     expect(r.status).toBe(303);
     expect(r.location).toBe(`/admin/repos/${id}?renamed=1`);
     const row = (await repos.findRepoById(env.DB, id))!;
-    expect([row.name, row.storage_name]).toEqual(["ren-b", "ren-a"]);
+    expect([row.name, row.storage_name]).toEqual(["ren-b", id]);
     expect(await aliases(id)).toEqual([{ name: "ren-a", repo_id: id, deleted_at: null }]);
     const html = (await call("GET", r.location!)).html;
     expect(html).toContain("git remote set-url origin https://git.test/r/ren-b.git");
