@@ -3,7 +3,7 @@ import { raw } from "hono/html";
 import type { RepoRow } from "../db/repos";
 import type { Ref } from "../artifacts";
 import { blobHref, commitsHref, repoHref, treeHref } from "../render/paths";
-import { Book, Branch, Chevron, ChevronRight, Clock, Copy, Download, File, Folder, Link, Upload } from "./icons";
+import { Book, Branch, Chevron, ChevronRight, Clock, Copy, Download, File, Folder, Link, Terminal, Upload } from "./icons";
 
 export const NO_REPOS_OWNER = "Create an empty repository to push to, or import one from another host.";
 export const TOO_LARGE = "This file is too large to show or download from the web (the limit is about 20 MB). Clone the repository to get it.";
@@ -177,7 +177,7 @@ function About(props: { repo: RepoRow; branch: string; head: string | null; read
     <aside class="about">
       <h2>About</h2>
       {repo.description && <p class="about-desc">{repo.description}</p>}
-      <p class="about-label">Clone</p>
+      <p class="about-label"><Terminal /> Clone</p>
       <div class="clone">
         <code>{props.cloneUrl}</code>
         <button type="button" class="btn" data-copy={props.cloneUrl} aria-label="Copy clone URL" title="Copy"><Copy /></button>
