@@ -1,5 +1,7 @@
 type Content = string | Uint8Array;
-type Chain = { files: Record<string, Content>; commits?: { message: string; author?: string; authoredAt?: number }[] };
+type Chain = { files: Record<string, Content>; commits?: { message: string; author?: string; authoredAt?: number }[];
+  modes?: Record<string, string>; // path -> git mode: "100755" executable, "120000" symlink
+};
 type Seed = {
   defaultBranch?: string;
   tags?: string[]; // tags on an object that is not a commit: listed, but there is nothing to read
@@ -137,7 +139,7 @@ export class FakeArtifacts {
       const files = new Map<string, Uint8Array>();
       for (const [p, c] of Object.entries(b.files)) files.set(p, typeof c === "string" ? enc.encode(c) : c);
       r.files.set(key, files);
-      const root = this.buildTree(r, key, "", files);
+      const root = this.buildTree(r, key, "", files, b.modes ?? {});
       const msgs = b.commits ?? [{ message: "Initial commit" }];
       r.commits.set(key, msgs.map((m, i) => ({
         hash: fakeHash(`commit:${key}:${i}`), treeHash: root, message: m.message,
@@ -155,7 +157,7 @@ export class FakeArtifacts {
     return r;
   }
 
-  private buildTree(r: RepoData, branch: string, dir: string, files: Map<string, Uint8Array>): string {
+  private buildTree(r: RepoData, branch: string, dir: string, files: Map<string, Uint8Array>, modes: Record<string, string>): string {
     const prefix = dir ? `${dir}/` : "";
     const entries = new Map<string, ArtifactsTreeEntry>();
     for (const [path, bytes] of files) {
@@ -165,10 +167,11 @@ export class FakeArtifacts {
       if (slash < 0) {
         const hash = fakeHash(`blob:${branch}:${path}`);
         r.blobs.set(hash, bytes);
-        entries.set(rest, { name: rest, mode: "100644", hash, type: "blob" });
+        const mode = modes[path] ?? "100644";
+        entries.set(rest, { name: rest, mode, hash, type: mode === "100755" ? "exec" : mode === "120000" ? "symlink" : "blob" });
       } else {
         const sub = rest.slice(0, slash);
-        if (!entries.has(sub)) entries.set(sub, { name: sub, mode: "40000", hash: this.buildTree(r, branch, prefix + sub, files), type: "tree" });
+        if (!entries.has(sub)) entries.set(sub, { name: sub, mode: "40000", hash: this.buildTree(r, branch, prefix + sub, files, modes), type: "tree" });
       }
     }
     const hash = fakeHash(`tree:${branch}:${dir}`);

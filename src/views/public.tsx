@@ -3,7 +3,7 @@ import { raw } from "hono/html";
 import type { RepoRow } from "../db/repos";
 import type { Ref } from "../artifacts";
 import { blobHref, commitsHref, repoHref, treeHref } from "../render/paths";
-import { Book, Branch, Chevron, ChevronRight, Clock, Copy, Download, File, Folder, Upload } from "./icons";
+import { Book, Branch, Chevron, ChevronRight, Clock, Copy, Download, File, Folder, Link, Upload } from "./icons";
 
 export const NO_REPOS_OWNER = "Create an empty repository to push to, or import one from another host.";
 export const TOO_LARGE = "This file is too large to show or download from the web (the limit is about 20 MB). Clone the repository to get it.";
@@ -222,7 +222,10 @@ export function TreeView(props: {
               ) : e.type === "gitlink" ? (
                 <span class="entry submodule"><Folder />{e.name} <span class="muted">(submodule)</span></span>
               ) : (
-                <a class="entry file" href={blobHref(repo.name, branch, child(e.name))}><File />{e.name}</a>
+                <a class="entry file" href={blobHref(repo.name, branch, child(e.name))}>
+                  {e.type === "symlink" ? <Link /> : <File />}{e.name}
+                  {e.type === "exec" && <span class="badge">executable</span>}
+                </a>
               )}
             </li>
           ))}
@@ -258,13 +261,17 @@ export function TreeView(props: {
   );
 }
 
+export type Symlink = { target: string; href: string | null; missing: boolean };
+
 export function BlobView(props: {
   repo: RepoRow; branch: string; kind: Ref["kind"]; branches: Ref[]; tags: Ref[]; path: string; levels: ArtifactsTreeEntry[][]; size: number; lines: number;
   binary: boolean; truncated: boolean; html: string | null; markdown: boolean; showingSource: boolean; tooLarge: boolean; cloneUrl: string;
+  exec?: boolean; symlink?: Symlink | null; // unset for a file too large to read
 }) {
   const { repo, branch, path } = props;
   const base = blobHref(repo.name, branch, path);
   const preview = props.markdown && !props.showingSource;
+  const summary = props.symlink ? "Symlink" : props.binary ? fmtSize(props.size) : `${plural(props.lines, "line")} · ${fmtSize(props.size)}`;
   return (
     <>
       <RepoHeader repo={repo}>
@@ -282,7 +289,7 @@ export function BlobView(props: {
           ) : (
             <div class="card file">
               <div class="file-head">
-                <span class="muted">{props.binary ? fmtSize(props.size) : `${plural(props.lines, "line")} · ${fmtSize(props.size)}`}</span>
+                <span class="muted">{summary}{props.exec && " · Executable"}</span>
                 <span class="file-actions">
                   {props.markdown && (
                     <nav class="segctl" aria-label="View">
@@ -295,7 +302,12 @@ export function BlobView(props: {
                 </span>
               </div>
               {props.truncated && <p class="notice">Showing the first 1 MB. <a href={`${base}?raw`}>View the whole file</a>.</p>}
-              {props.binary ? (
+              {props.symlink ? (
+                <p class="notice">
+                  Symlink to {props.symlink.href ? <a href={props.symlink.href}><code>{props.symlink.target}</code></a> : <code>{props.symlink.target}</code>}
+                  {props.symlink.missing && " (missing)"}
+                </p>
+              ) : props.binary ? (
                 <p class="notice">Binary file not shown. <a href={`${base}?raw`}>Download</a></p>
               ) : preview ? (
                 <article class="markdown">{raw(props.html ?? "")}</article>

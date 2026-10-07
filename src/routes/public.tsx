@@ -5,10 +5,10 @@ import { canView, getViewer, visibleRepos } from "../auth/viewer";
 import { findLiveAlias, findLiveRepo, type RepoRow } from "../db/repos";
 import { highlightCode } from "../render/highlight";
 import { renderMarkdown } from "../render/markdown";
-import { cloneUrl, decodePath, repoHref, splitRefPath } from "../render/paths";
+import { blobHref, cloneUrl, decodePath, repoHref, resolveRelative, splitRefPath, treeHref } from "../render/paths";
 import { siteOrigin } from "../lib/site";
 import { page } from "../views/layout";
-import { BlobView, Commits, EmptyRepo, Home, TOO_LARGE, TreeView } from "../views/public";
+import { BlobView, Commits, EmptyRepo, Home, TOO_LARGE, TreeView, type Symlink } from "../views/public";
 
 export const MAX_VIEW_BYTES = 1_048_576;
 const PER_PAGE = 30;
@@ -106,6 +106,18 @@ publicRoutes.get(`/r/:repo{${NAME}}/tree/*`, async (c) => {
   return renderTree(c, l, at.ref, at.path);
 });
 
+/** Where a symlink points: a link when the target is inside the repo and exists, else plain text (flagged `missing` when it is inside the repo but absent). */
+async function resolveSymlink(h: ArtifactsRepo, rootTree: string, l: Loaded, ref: string, dir: string, target: string): Promise<Symlink> {
+  const text = { target, href: null, missing: false };
+  const to = target.startsWith("/") ? null : resolveRelative(dir, target); // resolveRelative would read "/etc/x" as the repo path "etc/x"
+  if (to === null) return text;
+  if (to === "") return { ...text, href: treeHref(l.repo.name, ref) };
+  const levels = await readLevels(h, rootTree, to.split("/").slice(0, -1).join("/"));
+  const found = levels?.[levels.length - 1].find((e) => e.name === to.split("/").pop());
+  if (!found) return { ...text, missing: true };
+  return { ...text, href: found.type === "tree" ? treeHref(l.repo.name, ref, to) : blobHref(l.repo.name, ref, to) };
+}
+
 publicRoutes.get(`/r/:repo{${NAME}}/blob/*`, async (c) => {
   const l = await load(c);
   if (l instanceof Response) return l;
@@ -120,6 +132,8 @@ publicRoutes.get(`/r/:repo{${NAME}}/blob/*`, async (c) => {
   const levels = await readLevels(h, commit.treeHash, dir);
   if (!levels) return c.notFound();
   const filename = at.path.split("/").pop()!;
+  const entry = levels[levels.length - 1].find((e) => e.name === filename);
+  if (!entry || entry.type === "tree" || entry.type === "gitlink") return c.notFound();
   const wantsRaw = c.req.query("raw") !== undefined;
   let blob: Blob | null;
   try {
@@ -154,9 +168,10 @@ publicRoutes.get(`/r/:repo{${NAME}}/blob/*`, async (c) => {
 
   const markdown = /\.md$/i.test(filename);
   const showingSource = c.req.query("source") !== undefined;
+  const symlink = entry.type === "symlink" ? await resolveSymlink(h, commit.treeHash, l, at.ref.name, dir, await blob.slice(0, 4096).text()) : null;
   let html: string | null = null;
   let lines = 0;
-  if (!binary) {
+  if (!binary && !symlink) {
     const text = await blob.slice(0, MAX_VIEW_BYTES).text();
     lines = text === "" ? 0 : text.split("\n").length - (text.endsWith("\n") ? 1 : 0);
     html = markdown && !showingSource ? renderMarkdown(text, { repo: l.repo.name, branch: at.ref.name, dir }) : highlightCode(text, filename);
@@ -165,7 +180,7 @@ publicRoutes.get(`/r/:repo{${NAME}}/blob/*`, async (c) => {
     c,
     `${filename} · ${l.repo.name}`,
     <BlobView repo={l.repo} branch={at.ref.name} kind={at.ref.kind} branches={l.branches} tags={l.tags} path={at.path} levels={levels} size={blob.size} lines={lines}
-      binary={binary} truncated={!binary && blob.size > MAX_VIEW_BYTES} html={html} markdown={markdown} showingSource={showingSource} tooLarge={false} cloneUrl={l.cloneUrl} />,
+      binary={binary} truncated={!binary && blob.size > MAX_VIEW_BYTES} html={html} markdown={markdown} showingSource={showingSource} tooLarge={false} cloneUrl={l.cloneUrl} exec={entry.type === "exec"} symlink={symlink} />,
     200,
     { wide: true },
   );

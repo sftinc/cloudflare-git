@@ -8,6 +8,8 @@ import { makeEnv, request } from "./helpers/env";
 import { stubArtifactsGit } from "./helpers/git-http";
 import { ownerEnv, ownerToken } from "./helpers/jwt";
 
+const SYMLINKS = ["docs/up-link", "link-in", "link-dir", "link-slash", "link-up", "link-abs", "link-gone"];
+
 let fake: FakeArtifacts;
 const big = "x".repeat(1_100_000);
 
@@ -48,7 +50,21 @@ beforeEach(async () => {
     defaultBranch: "main",
     tags: ["dangling"], // a tag on something that is not a commit
     branches: {
-      main: { files: { "a.txt": "on main", "f10.txt": "10", "f2.txt": "2", "f1.txt": "1", "docs/x.txt": "x" } },
+      main: {
+        files: {
+          "a.txt": "on main", "f10.txt": "10", "f2.txt": "2", "f1.txt": "1", "docs/x.txt": "x",
+          "bin/run.sh": "#!/bin/sh\necho hi\n",
+          "docs/index.md": "# Docs index",
+          "docs/up-link": "../a.txt", // relative to the link's own folder
+          "link-in": "docs/index.md",
+          "link-dir": "docs",
+          "link-slash": "docs/",
+          "link-up": "../outside",
+          "link-abs": "/etc/passwd",
+          "link-gone": "docs/nope.md",
+        },
+        modes: { "bin/run.sh": "100755", ...Object.fromEntries(SYMLINKS.map((p) => [p, "120000"])) },
+      },
       v2: { files: { "a.txt": "branch v2" }, commits: [{ message: "Branch v2 commit" }] },
     },
     tagged: {
@@ -399,5 +415,38 @@ describe("branch switcher", () => {
     const r = await html("/r/secret", await ownerEnv({ ARTIFACTS: fake }), { "cf-access-jwt-assertion": await ownerToken() });
     expect(r.body).toContain('class="branches"');
     expect(r.body).not.toContain('class="group"');
+  });
+});
+
+describe("executables and symlinks", () => {
+  it("marks executables in the tree and on the blob page", async () => {
+    expect((await html("/r/rich/tree/main/bin")).body).toContain('<span class="badge">executable</span>');
+    expect((await html("/r/rich")).body).not.toContain('<span class="badge">executable</span>');
+    expect((await html("/r/rich/blob/main/bin/run.sh")).body).toContain("Executable");
+    expect((await html("/r/rich/blob/main/a.txt")).body).not.toContain("Executable");
+  });
+  it("shows a link icon for symlinks in the tree", async () => {
+    const { body } = await html("/r/rich");
+    expect(body).toContain('<a class="entry file" href="/r/rich/blob/main/link-in"><svg class="icon symlink"');
+    expect(body).toContain('<a class="entry file" href="/r/rich/blob/main/a.txt"><svg class="icon" ');
+  });
+  it.each([
+    ["link-in", '<a href="/r/rich/blob/main/docs/index.md"><code>docs/index.md</code></a>'],
+    ["link-dir", '<a href="/r/rich/tree/main/docs"><code>docs</code></a>'],
+    ["link-slash", '<a href="/r/rich/tree/main/docs"><code>docs/</code></a>'],
+    ["docs/up-link", '<a href="/r/rich/blob/main/a.txt"><code>../a.txt</code></a>'],
+    ["link-up", "<code>../outside</code></p>"],
+    ["link-abs", "<code>/etc/passwd</code></p>"],
+    ["link-gone", "<code>docs/nope.md</code> (missing)"],
+  ])("blob page of symlink %s shows its target", async (path, target) => {
+    const r = await html(`/r/rich/blob/main/${path}`);
+    expect(r.status).toBe(200);
+    expect(r.body).toContain(`Symlink to ${target}`);
+    expect(r.body).not.toContain('class="code-lines"');
+  });
+  it("raw of a symlink is the target path", async () => {
+    const r = await html("/r/rich/blob/main/link-in?raw");
+    expect(r.body).toBe("docs/index.md");
+    expect(r.headers.get("content-type")).toBe("text/plain; charset=utf-8");
   });
 });
