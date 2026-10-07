@@ -77,7 +77,7 @@ async function renderTree(c: Context<AppEnv>, l: Loaded, ref: Ref, path: string)
   return page(
     c,
     title,
-    <TreeView repo={l.repo} branch={ref.name} branches={l.branches} tags={l.tags} head={l.head} path={path} levels={levels} commit={commit}
+    <TreeView repo={l.repo} branch={ref.name} kind={ref.kind} branches={l.branches} tags={l.tags} head={l.head} path={path} levels={levels} commit={commit}
       readme={readme} readmeName={readmeEntry?.name ?? null} info={info} cloneUrl={l.cloneUrl} now={Date.now()} />,
     200,
     { wide: !!path }, // subfolders get the file tree
@@ -151,7 +151,7 @@ publicRoutes.get(`/r/:repo{${NAME}}/blob/*`, async (c) => {
   return page(
     c,
     `${filename} · ${l.repo.name}`,
-    <BlobView repo={l.repo} branch={at.ref.name} branches={l.branches} path={at.path} levels={levels} size={blob.size} lines={lines}
+    <BlobView repo={l.repo} branch={at.ref.name} kind={at.ref.kind} branches={l.branches} tags={l.tags} path={at.path} levels={levels} size={blob.size} lines={lines}
       binary={binary} truncated={!binary && blob.size > MAX_VIEW_BYTES} html={html} markdown={markdown} showingSource={showingSource} />,
     200,
     { wide: true },
@@ -171,6 +171,6 @@ publicRoutes.get(`/r/:repo{${NAME}}/commits/*`, async (c) => {
   return page(
     c,
     `Commits · ${l.repo.name}`,
-    <Commits repo={l.repo} branch={at.ref.name} branches={l.branches} commits={list.slice(0, PER_PAGE)} page={pageNo} hasNext={list.length > PER_PAGE} now={Date.now()} />,
+    <Commits repo={l.repo} branch={at.ref.name} kind={at.ref.kind} branches={l.branches} tags={l.tags} commits={list.slice(0, PER_PAGE)} page={pageNo} hasNext={list.length > PER_PAGE} now={Date.now()} />,
   );
 });

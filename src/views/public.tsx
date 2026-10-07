@@ -87,18 +87,21 @@ function RepoHeader(props: { repo: RepoRow; children?: Child }) {
   );
 }
 
-function BranchSwitcher(props: { branches: Ref[]; current: string; href: (name: string) => string }) {
+function BranchSwitcher(props: { branches: Ref[]; tags: Ref[]; current: string; kind: Ref["kind"]; href: (name: string) => string }) {
+  const item = (r: Ref) => (
+    <li>
+      <a href={props.href(r.name)} class={r.kind === props.kind && r.name === props.current ? "current" : undefined}>{r.name}</a>
+    </li>
+  );
   return (
     <details class="branches">
       <summary>
-        <Branch /> <strong>{props.current}</strong> <Chevron />
+        <Branch /> <strong>{props.current}</strong>{props.kind === "tag" && <span class="badge">tag</span>} <Chevron />
       </summary>
       <ul>
-        {props.branches.map((b) => (
-          <li>
-            <a href={props.href(b.name)} class={b.name === props.current ? "current" : undefined}>{b.name}</a>
-          </li>
-        ))}
+        {props.branches.map(item)}
+        {props.tags.length > 0 && <li class="group">Tags</li>}
+        {props.tags.map(item)}
       </ul>
     </details>
   );
@@ -189,7 +192,7 @@ function About(props: { repo: RepoRow; branch: string; head: string | null; read
 }
 
 export function TreeView(props: {
-  repo: RepoRow; branch: string; branches: Ref[]; tags: Ref[]; head: string | null; path: string; levels: ArtifactsTreeEntry[][];
+  repo: RepoRow; branch: string; kind: Ref["kind"]; branches: Ref[]; tags: Ref[]; head: string | null; path: string; levels: ArtifactsTreeEntry[][];
   commit: ArtifactsCommitMetadata; readme: string | null; readmeName: string | null; info: ArtifactsRepoInfo | null; cloneUrl: string; now: number;
 }) {
   const { repo, branch, path, commit } = props;
@@ -235,7 +238,7 @@ export function TreeView(props: {
   return (
     <>
       <RepoHeader repo={repo}>
-        <BranchSwitcher branches={props.branches} current={branch} href={(b) => treeHref(repo.name, b)} />
+        <BranchSwitcher branches={props.branches} tags={props.tags} current={branch} kind={props.kind} href={(b) => treeHref(repo.name, b)} />
         <span class="count"><strong>{props.branches.length}</strong> {props.branches.length === 1 ? "branch" : "branches"}</span>
         <span class="count"><strong>{props.tags.length}</strong> {props.tags.length === 1 ? "tag" : "tags"}</span>
       </RepoHeader>
@@ -255,7 +258,7 @@ export function TreeView(props: {
 }
 
 export function BlobView(props: {
-  repo: RepoRow; branch: string; branches: Ref[]; path: string; levels: ArtifactsTreeEntry[][]; size: number; lines: number;
+  repo: RepoRow; branch: string; kind: Ref["kind"]; branches: Ref[]; tags: Ref[]; path: string; levels: ArtifactsTreeEntry[][]; size: number; lines: number;
   binary: boolean; truncated: boolean; html: string | null; markdown: boolean; showingSource: boolean;
 }) {
   const { repo, branch, path } = props;
@@ -264,7 +267,7 @@ export function BlobView(props: {
   return (
     <>
       <RepoHeader repo={repo}>
-        <BranchSwitcher branches={props.branches} current={branch} href={(b) => treeHref(repo.name, b)} />
+        <BranchSwitcher branches={props.branches} tags={props.tags} current={branch} kind={props.kind} href={(b) => treeHref(repo.name, b)} />
       </RepoHeader>
       <div class="split">
         <FileTree repo={repo.name} branch={branch} levels={props.levels} current={path} />
@@ -305,7 +308,7 @@ export function BlobView(props: {
 const fmtDayLong = (sec: number) => new Date(sec * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 
 export function Commits(props: {
-  repo: RepoRow; branch: string; branches: Ref[]; commits: ArtifactsCommitMetadata[]; page: number; hasNext: boolean; now: number;
+  repo: RepoRow; branch: string; kind: Ref["kind"]; branches: Ref[]; tags: Ref[]; commits: ArtifactsCommitMetadata[]; page: number; hasNext: boolean; now: number;
 }) {
   const { repo, branch } = props;
   const href = (p: number) => `${commitsHref(repo.name, branch)}?page=${p}`;
@@ -318,7 +321,7 @@ export function Commits(props: {
   return (
     <>
       <RepoHeader repo={repo}>
-        <BranchSwitcher branches={props.branches} current={branch} href={(b) => commitsHref(repo.name, b)} />
+        <BranchSwitcher branches={props.branches} tags={props.tags} current={branch} kind={props.kind} href={(b) => commitsHref(repo.name, b)} />
       </RepoHeader>
       {days.map((d) => (
         <>

@@ -357,3 +357,24 @@ describe("tags", () => {
     for (const path of ["/r/rich/tree/dangling", "/r/rich/blob/dangling/a.txt", "/r/rich/commits/dangling"]) expect((await html(path)).status).toBe(404);
   });
 });
+
+describe("branch switcher", () => {
+  it("lists tags under a Tags heading and badges a tag page", async () => {
+    const onTag = await html("/r/rich/tree/v1");
+    expect(onTag.body).toContain('<li class="group">Tags</li>');
+    expect(onTag.body).toContain('<span class="badge">tag</span>');
+    expect(onTag.body).toContain('<a href="/r/rich/tree/v1" class="current">v1</a>');
+    expect(onTag.body).toContain('<a href="/r/rich/tree/rel/1.0">rel/1.0</a>');
+    expect((await html("/r/rich/commits/v1")).body).toContain('<a href="/r/rich/commits/rel/1.0">rel/1.0</a>');
+    expect((await html("/r/rich/blob/v1/a.txt")).body).toContain('<span class="badge">tag</span>');
+    const onBranch = await html("/r/rich");
+    expect(onBranch.body).toContain('<li class="group">Tags</li>');
+    expect(onBranch.body).toContain('<a href="/r/rich/tree/main" class="current">main</a>');
+    expect(onBranch.body).not.toContain('<span class="badge">tag</span>');
+  });
+  it("leaves out the Tags heading when there are no tags", async () => {
+    const r = await html("/r/secret", await ownerEnv({ ARTIFACTS: fake }), { "cf-access-jwt-assertion": await ownerToken() });
+    expect(r.body).toContain('class="branches"');
+    expect(r.body).not.toContain('class="group"');
+  });
+});
