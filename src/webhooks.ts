@@ -43,7 +43,11 @@ async function deliverOne(db: D1Database, hook: WebhookRow, event: PushEvent) {
     result = (err as Error)?.name === "TimeoutError" ? "timeout" : "connection failed";
     console.warn(JSON.stringify({ msg: "webhook failed", webhook: hook.id, url: hook.url, error: String(err), ms: Date.now() - started }));
   }
-  await recordDelivery(db, hook.id, result, Date.now());
+  try {
+    await recordDelivery(db, hook.id, result, Date.now());
+  } catch (err) {
+    console.error(JSON.stringify({ msg: "webhook record failed", webhook: hook.id, result, error: String(err) }));
+  }
 }
 
 /** No retries (spec §8); each attempt's result is recorded on its hook, and failures never affect the push. */

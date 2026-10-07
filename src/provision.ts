@@ -86,8 +86,15 @@ export async function provisionRepo(db: D1Database, art: Artifacts, input: Provi
   }
   const alias = await findAlias(db, input.name);
   if (alias && alias.repo_id !== input.takeAlias) return { ok: false, error: aliasWarning(input.name, alias.repo_name), takeAlias: alias.repo_id };
-  const repo = await insertRepo(db, { name: input.name, description: input.description || null }, now, alias?.repo_id ?? null);
+  let repo: RepoRow;
+  try {
+    repo = await insertRepo(db, { name: input.name, description: input.description || null }, now, alias?.repo_id ?? null);
+  } catch (err) {
+    if (!String(err).includes("UNIQUE")) throw err; // another request took the name meanwhile
+    return { ok: false, error: `A repo named "${input.name}" already exists.` };
+  }
   let status: ProvisionStatus = "missing";
+  let failed = false;
   let code: string | null = null;
   try {
     if (input.kind === "create") {
@@ -100,6 +107,7 @@ export async function provisionRepo(db: D1Database, art: Artifacts, input: Provi
     }
     status = await refreshProvisioning(db, art, repo, now);
   } catch (err) {
+    failed = true;
     code = artifactsErrorCode(err);
     console.warn(JSON.stringify({ msg: "provision failed", repo: input.name, kind: input.kind, code, error: String(err) }));
   }
@@ -107,7 +115,8 @@ export async function provisionRepo(db: D1Database, art: Artifacts, input: Provi
   // Only this request retires the row: a page refresh can't tell a failed create from one still running.
   await retireRepo(db, repo.id, now);
   const error =
-    input.kind === "import" && input.branch && code === "NOT_FOUND"
+    !failed ? "Artifacts didn't confirm the repo was created. Try again."
+    : input.kind === "import" && input.branch && code === "NOT_FOUND"
       ? `Nothing was found at that URL, or it has no branch "${input.branch}".`
       : ((code && MESSAGES[code]) ?? `Artifacts couldn't ${input.kind} the repo (${code ?? "unknown error"}). Try again.`);
   return { ok: false, error };

@@ -121,8 +121,14 @@ async function repoPage(c: Context<AppEnv>, extra: { secret?: { title: string; v
   if (!repo || repo.purged_at !== null || (repo.provisioned_at === null && repo.deleted_at !== null)) return c.notFound();
   let s: ProvisionStatus = "ready";
   if (repo.provisioned_at === null && repo.deleted_at === null) {
-    s = await refreshProvisioning(c.env.DB, c.env.ARTIFACTS, repo, Date.now());
-    if (s === "ready") repo.provisioned_at = Date.now();
+    try {
+      s = await refreshProvisioning(c.env.DB, c.env.ARTIFACTS, repo, Date.now());
+      if (s === "ready") repo.provisioned_at = Date.now();
+    } catch (err) {
+      // As on the list: the page still opens, showing "Import failed" with Discard.
+      console.error(JSON.stringify({ msg: "provisioning check failed", repo: repo.name, error: String(err) }));
+      s = "missing";
+    }
   }
   const hooks = await listWebhooks(c.env.DB, repo.id);
   return admin(c, `${repo.name} · admin`, <AdminRepo repo={repo} status={s} hooks={hooks} now={Date.now()} restoreDays={restoreDays(c.env)} renamedUrl={c.req.query("renamed") ? cloneUrl(siteOrigin(c), repo.name) : undefined} {...extra} />, status);
@@ -214,10 +220,17 @@ adminRoutes.post("/repos/:id/restore", async (c) => {
 adminRoutes.post("/repos/:id/discard", async (c) => {
   const repo = await findRepoById(c.env.DB, c.req.param("id"));
   if (!repo || repo.deleted_at !== null || repo.provisioned_at !== null) return c.notFound();
-  const status = await refreshProvisioning(c.env.DB, c.env.ARTIFACTS, repo, Date.now());
+  let status: ProvisionStatus;
+  try {
+    status = await refreshProvisioning(c.env.DB, c.env.ARTIFACTS, repo, Date.now());
+  } catch (err) {
+    console.error(JSON.stringify({ msg: "provisioning check failed", repo: repo.name, error: String(err) }));
+    return repoPage(c, { error: "Couldn't check the import. Try again." }, 422);
+  }
   if (status === "ready") return c.redirect(`/admin/repos/${repo.id}`, 303);
   if (status === "pending") return repoPage(c, { error: "It's still importing." }, 422);
-  await retireRepo(c.env.DB, repo.id, Date.now());
+  // Not retired: it is no longer pending (created meanwhile), so its page shows what it is now.
+  if (!(await retireRepo(c.env.DB, repo.id, Date.now()))) return c.redirect(`/admin/repos/${repo.id}`, 303);
   return c.redirect("/admin/repos", 303);
 });
 

@@ -135,6 +135,28 @@ describe("provisionRepo", () => {
     expect(second.repo.storage_name).not.toBe(first.storage_name);
   });
 
+  it("a create racing another with the same name gets the already-exists error", async () => {
+    const f = new FakeArtifacts();
+    const prepare = env.DB.prepare.bind(env.DB);
+    vi.spyOn(env.DB, "prepare").mockImplementation((q: string) => {
+      if (!q.startsWith("SELECT a.repo_id")) return prepare(q);
+      // the alias check runs after the name check: the other request inserts its row then
+      const other = prepare("INSERT INTO repos (id, name, storage_name, created_at, updated_at) VALUES ('race1', 'p14', 'race1', 1, 1)");
+      return { bind: (...args: unknown[]) => ({ first: async () => (await other.run(), prepare(q).bind(...args).first()) }) } as never;
+    });
+    const r = await provisionRepo(env.DB, art(f), create("p14"), 2, 30);
+    expect(r).toEqual({ ok: false, error: 'A repo named "p14" already exists.' });
+    expect((await repos.findRepoByName(env.DB, "p14"))!.id).toBe("race1");
+  });
+
+  it("a create Artifacts didn't confirm is a failure that gives the name back", async () => {
+    const f = new FakeArtifacts();
+    vi.spyOn(f, "create").mockResolvedValue({} as never); // returned, but nothing is there
+    const r = await provisionRepo(env.DB, art(f), create("p15"), 1, 30);
+    expect(r).toEqual({ ok: false, error: "Artifacts didn't confirm the repo was created. Try again." });
+    expect(await repos.findRepoByName(env.DB, "p15")).toBeNull();
+  });
+
   it("names the branch when an import with a branch finds nothing", async () => {
     quiet();
     const f = new FakeArtifacts();

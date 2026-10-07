@@ -7,7 +7,7 @@ import * as repos from "../src/db/repos";
 import * as tokens from "../src/db/tokens";
 import * as invites from "../src/db/invites";
 import * as hooks from "../src/db/webhooks";
-import { FakeArtifacts } from "./helpers/fake-artifacts";
+import { artifactsError, FakeArtifacts } from "./helpers/fake-artifacts";
 import { request } from "./helpers/env";
 import { ownerEnv, ownerToken } from "./helpers/jwt";
 import { DAY_MS } from "../src/purge";
@@ -306,6 +306,25 @@ describe("failed creates and imports", () => {
     const r = await call("POST", `/admin/repos/${row.id}/discard`, {});
     expect([r.status, r.location]).toEqual([303, `/admin/repos/${row.id}`]);
     expect((await repos.findRepoById(env.DB, row.id))!.provisioned_at).not.toBeNull();
+  });
+  it("Discard when the check fails says so and changes nothing", async () => {
+    const row = await repos.insertRepo(env.DB, { name: "fc-check", description: null }, Date.now());
+    vi.spyOn(fake, "get").mockRejectedValue(artifactsError("INTERNAL_ERROR"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const r = await call("POST", `/admin/repos/${row.id}/discard`, {});
+    expect(r.status).toBe(422);
+    expect(r.html).toContain("Couldn&#39;t check the import. Try again.");
+    expect((await repos.findRepoById(env.DB, row.id))!.name).toBe("fc-check");
+  });
+  it("Discard on an import created meanwhile goes to its page", async () => {
+    const row = await repos.insertRepo(env.DB, { name: "fc-late", description: null }, Date.now());
+    vi.spyOn(fake, "get").mockImplementation(async () => {
+      await repos.markProvisioned(env.DB, row.id, Date.now()); // another request saw it ready
+      throw artifactsError("NOT_FOUND");
+    });
+    const r = await call("POST", `/admin/repos/${row.id}/discard`, {});
+    expect([r.status, r.location]).toEqual([303, `/admin/repos/${row.id}`]);
+    expect((await repos.findRepoById(env.DB, row.id))!.name).toBe("fc-late");
   });
   it("Discard 404s for a created, a deleted or an unknown repo", async () => {
     const id = (await call("POST", "/admin/repos", { name: "fc-made" })).location!.split("/").pop()!;

@@ -75,6 +75,21 @@ describe("deliverWebhooks", () => {
     expect(JSON.parse(warn.mock.calls[0][0] as string)).toMatchObject({ msg: "webhook rejected", status: 500 });
   });
 
+  it("a failing record is logged and doesn't reject the deliveries", async () => {
+    const r = await repos.insertRepo(env.DB, { name: "wh-rec", description: null }, 1);
+    const id = await hooks.createWebhook(env.DB, { repoId: r.id, url: "https://rec.test/hook", branch: null, secret: "k" }, 1);
+    stubFetch(() => new Response("ok"));
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const prepare = env.DB.prepare.bind(env.DB);
+    vi.spyOn(env.DB, "prepare").mockImplementation((q: string) => {
+      if (q.startsWith("UPDATE webhooks SET last_result")) throw new Error("D1 down");
+      return prepare(q);
+    });
+    await deliverWebhooks(env.DB, r, [{ repo: "wh-rec", branch: "main", before: A, after: B, deleted: false, pushed_at: 5 }]);
+    expect(err).toHaveBeenCalledWith(JSON.stringify({ msg: "webhook record failed", webhook: id, result: "200", error: "Error: D1 down" }));
+  });
+
   it("records each hook's latest result without touching updated_at", async () => {
     const r = await repos.insertRepo(env.DB, { name: "wh-status", description: null }, 1);
     for (const host of ["ok", "rej", "slow", "down"]) {
