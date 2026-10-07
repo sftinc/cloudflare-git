@@ -108,7 +108,7 @@ const remaining = (text: string) => `${Math.max(0, DESCRIPTION_MAX - text.length
 
 const NAME_INPUT = { type: "text", name: "name", required: true, pattern: "[a-z0-9][a-z0-9\\-]{1,62}", title: "2-63 lowercase letters, digits or hyphens, starting with a letter or digit" };
 
-export function AdminNewRepo(props: { kind: "create" | "import"; error?: string; values?: RepoFormValues; restoreId?: string }) {
+export function AdminNewRepo(props: { kind: "create" | "import"; error?: string; values?: RepoFormValues; restoreId?: string; takeAlias?: string }) {
   const v = props.values ?? {};
   const create = props.kind === "create";
   const name = <label>Name <span class="hint">lowercase letters, digits, hyphens</span><input {...NAME_INPUT} value={v.name ?? ""} /></label>;
@@ -135,11 +135,12 @@ export function AdminNewRepo(props: { kind: "create" | "import"; error?: string;
         {props.error && (
           <div class="error">
             {props.error} {props.restoreId && <Post action={`/admin/repos/${props.restoreId}/restore`} label="Restore it" class="link" />}
+            {props.takeAlias && <button type="submit" form="repo-form" name="take_alias" value={props.takeAlias} class="link">Take the name anyway</button>}
           </div>
         )}
         <section class="card">
           {create ? (
-            <form method="post" action="/admin/repos" class="stack">
+            <form method="post" action="/admin/repos" class="stack" id="repo-form">
               {name}
               {description}
               <label>Default branch<input type="text" name="defaultBranch" value={v.defaultBranch || "main"} /></label>
@@ -147,7 +148,7 @@ export function AdminNewRepo(props: { kind: "create" | "import"; error?: string;
               <button type="submit" class="primary">Create repository</button>
             </form>
           ) : (
-            <form method="post" action="/admin/import" class="stack">
+            <form method="post" action="/admin/import" class="stack" id="repo-form">
               <label>Source URL<input type="url" name="url" required placeholder="https://github.com/you/repo" value={v.url ?? ""} /></label>
               <label>Branch <span class="hint">optional, defaults to the source's default</span><input type="text" name="branch" value={v.branch ?? ""} /></label>
               <p class="hint">Imports one branch and no tags. For every branch and tag, create an empty repository and push a mirror (see README).</p>
@@ -165,7 +166,7 @@ export function AdminNewRepo(props: { kind: "create" | "import"; error?: string;
 
 export function AdminRepo(props: {
   repo: RepoRow; status: "ready" | "pending" | "missing"; hooks: WebhookRow[]; now: number;
-  secret?: { title: string; value: string }; error?: string; description?: string; name?: string; renamedUrl?: string;
+  secret?: { title: string; value: string }; error?: string; description?: string; name?: string; renamedUrl?: string; takeAlias?: string;
 }) {
   const r = props.repo;
   const description = props.description ?? r.description ?? "";
@@ -176,7 +177,11 @@ export function AdminRepo(props: {
         <Book /><a href="/admin/repos" class="crumb">Repos</a><span class="sep">/</span><span class="settings-name">{r.name}</span>
         {repoState(r, new Set(props.status === "pending" ? [r.id] : []))}
       </h1>
-      {props.error && <div class="error">{props.error}</div>}
+      {props.error && (
+        <div class="error">
+          {props.error} {props.takeAlias && <button type="submit" form="rename-form" name="take_alias" value={props.takeAlias} class="link">Take the name anyway</button>}
+        </div>
+      )}
       {props.secret && <Secret title={props.secret.title} value={props.secret.value} />}
       {live && (
         <>
@@ -191,7 +196,7 @@ export function AdminRepo(props: {
           )}
           <h2 class="section-title">General</h2>
           <div class="box">
-            <form method="post" action={`/admin/repos/${r.id}/rename`} class="row field-row">
+            <form method="post" action={`/admin/repos/${r.id}/rename`} class="row field-row" id="rename-form">
               <label for="repo-name">Repository name</label>
               <div class="inline">
                 <input {...NAME_INPUT} id="repo-name" value={props.name ?? r.name} aria-describedby="repo-name-hint" />

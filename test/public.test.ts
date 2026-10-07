@@ -298,7 +298,8 @@ describe("files", () => {
 });
 
 describe("old names", () => {
-  const rename = (name: string, to: string) => repos.findRepoByName(env.DB, name).then((r) => repos.renameRepo(env.DB, r!.id, to, 2));
+  const rename = async (name: string, to: string) =>
+    repos.renameRepo(env.DB, (await repos.findRepoByName(env.DB, name))!.id, to, 2, (await repos.findAlias(env.DB, to))?.repo_id ?? null);
   const at = async (path: string, headers: Record<string, string> = {}) => {
     const r = await html(path, e(), headers);
     return { status: r.status, location: r.headers.get("location") };

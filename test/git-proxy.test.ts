@@ -239,7 +239,8 @@ describe("push", () => {
 });
 
 describe("old names", () => {
-  const rename = async (from: string, to: string) => repos.renameRepo(env.DB, (await repos.findRepoByName(env.DB, from))!.id, to, 2);
+  const rename = async (from: string, to: string) =>
+    repos.renameRepo(env.DB, (await repos.findRepoByName(env.DB, from))!.id, to, 2, (await repos.findAlias(env.DB, to))?.repo_id ?? null);
   const MOVED = "0039\x02This repository moved. Please use the new location:\n" + "0024\x02  https://git.test/r/priv2.git\n";
   const pushBody = () =>
     encodePkt(`${A} ${B} refs/heads/main\0report-status side-band-64k\n`) + "0000PACK\x00\x00\x00\x02\x00\x00\x00\x00";

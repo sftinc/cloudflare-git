@@ -342,11 +342,12 @@ describe("rename", () => {
     const other = await newRepo("ren-t2");
     const gone = await newRepo("ren-t3");
     await call("POST", `/admin/repos/${gone}/delete`, {});
-    for (const name of ["ren-t2", "ren-t3"]) {
-      const r = await rename(id, name);
-      expect(r.status).toBe(422);
-      expect(r.html).toContain(`A repo named &quot;${name}&quot; already exists.`);
-    }
+    const live = await rename(id, "ren-t2");
+    expect(live.status).toBe(422);
+    expect(live.html).toContain("A repo named &quot;ren-t2&quot; already exists.");
+    const deleted = await rename(id, "ren-t3");
+    expect(deleted.status).toBe(422);
+    expect(deleted.html).toContain("A deleted repo is named &quot;ren-t3&quot;. Restore it, or pick another name.");
     expect((await repos.findRepoById(env.DB, other))!.name).toBe("ren-t2");
     expect(await aliases(id, other, gone)).toEqual([]);
   });
@@ -368,7 +369,7 @@ describe("rename", () => {
     const id = await newRepo("ren-a1");
     const third = await newRepo("ren-third");
     await rename(id, "ren-b1"); // elsewhere, after the page for ren-a1 was loaded
-    await rename(third, "ren-a1"); // takes the released name
+    await call("POST", `/admin/repos/${third}/rename`, { name: "ren-a1", take_alias: id }); // takes the old name, on request
     const r = await rename(id, "ren-c1"); // the delayed request
     expect(r.location).toBe(`/admin/repos/${id}?renamed=1`);
     expect((await repos.findRepoById(env.DB, id))!.name).toBe("ren-c1");
@@ -382,6 +383,104 @@ describe("rename", () => {
     expect(await repos.renameRepo(env.DB, id, "ren-race2", 5)).toBe(false);
     expect((await repos.findRepoById(env.DB, id))!.name).toBe("ren-race");
     expect(await aliases(id)).toEqual([]);
+  });
+  it("renameRepo itself won't take another repo's old name unless told to", async () => {
+    const a = await newRepo("ren-g1");
+    await rename(a, "ren-g2");
+    const b = await newRepo("ren-g3");
+    expect(await repos.renameRepo(env.DB, b, "ren-g1", Date.now())).toBe(false);
+    expect(await aliases(b)).toEqual([]);
+    expect((await repos.findRepoById(env.DB, b))!.name).toBe("ren-g3");
+    expect(await repos.renameRepo(env.DB, b, "ren-g1", Date.now(), a)).toBe(true);
+    expect((await repos.findLiveRepo(env.DB, "ren-g1"))!.id).toBe(b);
+  });
+});
+
+describe("taking another repo's old name", () => {
+  const newRepo = async (name: string) => (await call("POST", "/admin/repos", { name })).location!.split("/").pop()!;
+  const rename = (id: string, name: string, extra: Record<string, string> = {}) => call("POST", `/admin/repos/${id}/rename`, { name, ...extra });
+  const WARNING = (name: string, owner: string) =>
+    `&quot;${name}&quot; is an old name of repo &quot;${owner}&quot;: links and clones using &quot;${name}&quot; still reach &quot;${owner}&quot;. Taking the name breaks them right away, even if the create or import then fails.`;
+
+  it("rename onto another repo's old name warns, then takes it on request", async () => {
+    const a = await newRepo("ta-x");
+    await rename(a, "ta-a2"); // "ta-x" is now an old name of ta-a2
+    const b = await newRepo("ta-b");
+    const warned = await rename(b, "ta-x");
+    expect(warned.status).toBe(422);
+    expect(warned.html).toContain(WARNING("ta-x", "ta-a2"));
+    expect(warned.html).toContain(`<button type="submit" form="rename-form" name="take_alias" value="${a}" class="link">Take the name anyway</button>`);
+    expect(warned.html).toContain('id="rename-form"');
+    expect(warned.html).toContain('value="ta-x"');
+    expect((await repos.findRepoById(env.DB, b))!.name).toBe("ta-b");
+    const taken = await rename(b, "ta-x", { take_alias: a });
+    expect([taken.status, taken.location]).toEqual([303, `/admin/repos/${b}?renamed=1`]);
+    expect((await repos.findLiveRepo(env.DB, "ta-x"))!.id).toBe(b);
+    expect(await repos.findLiveAlias(env.DB, "ta-x")).toBeNull();
+  });
+  it("create and import onto another repo's old name warn, then take it on request", async () => {
+    const a = await newRepo("ta-c");
+    await rename(a, "ta-c2");
+    const warned = await call("POST", "/admin/repos", { name: "ta-c", description: "kept" });
+    expect(warned.status).toBe(422);
+    expect(warned.html).toContain(WARNING("ta-c", "ta-c2"));
+    expect(warned.html).toContain(`<button type="submit" form="repo-form" name="take_alias" value="${a}" class="link">Take the name anyway</button>`);
+    expect(warned.html).toContain('id="repo-form"');
+    expect(warned.html).toContain('value="kept"');
+    expect((await call("POST", "/admin/repos", { name: "ta-c", take_alias: a })).status).toBe(303);
+    expect((await repos.findLiveRepo(env.DB, "ta-c"))!.id).not.toBe(a);
+    expect(await repos.findLiveAlias(env.DB, "ta-c")).toBeNull();
+
+    const d = await newRepo("ta-i");
+    await rename(d, "ta-i2");
+    const imp = { name: "ta-i", url: "https://github.com/a/b" };
+    expect((await call("POST", "/admin/import", imp)).html).toContain(WARNING("ta-i", "ta-i2"));
+    expect((await call("POST", "/admin/import", { ...imp, take_alias: d })).status).toBe(303);
+    expect(await repos.findLiveAlias(env.DB, "ta-i")).toBeNull(); // and "ta-i" is a 404 until the import is ready
+  });
+  it("a failed create after taking the name leaves the old name gone", async () => {
+    const a = await newRepo("ta-f");
+    await rename(a, "ta-f2");
+    fake.failNext = { method: "create", code: "INTERNAL_ERROR" };
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect((await call("POST", "/admin/repos", { name: "ta-f", take_alias: a })).status).toBe(422);
+    expect(await repos.findLiveAlias(env.DB, "ta-f")).toBeNull();
+    expect(await repos.findRepoByName(env.DB, "ta-f")).toBeNull();
+  });
+  it("warns again when the old name changed owner after the warning", async () => {
+    const a = await newRepo("ta-o");
+    await rename(a, "ta-o2"); // ta-o -> a
+    const b = await newRepo("ta-ob");
+    expect((await rename(b, "ta-o")).html).toContain(`name="take_alias" value="${a}"`);
+    const c = await newRepo("ta-oc"); // meanwhile c takes the name, then moves on
+    await rename(c, "ta-o", { take_alias: a });
+    await rename(c, "ta-oc2"); // ta-o -> c
+    const again = await rename(b, "ta-o", { take_alias: a });
+    expect(again.status).toBe(422);
+    expect(again.html).toContain(WARNING("ta-o", "ta-oc2"));
+    expect(again.html).toContain(`name="take_alias" value="${c}"`);
+    expect((await repos.findLiveAlias(env.DB, "ta-o"))!.id).toBe(c);
+  });
+  it("take_alias only releases an old name its own repo holds", async () => {
+    const a = await newRepo("ta-g");
+    await rename(a, "ta-g2");
+    const b = await newRepo("ta-gb");
+    for (const take of ["garbage", b]) {
+      const r = await rename(b, "ta-g", { take_alias: take });
+      expect(r.status).toBe(422);
+      expect(r.html).toContain(WARNING("ta-g", "ta-g2"));
+    }
+    expect((await repos.findLiveAlias(env.DB, "ta-g"))!.id).toBe(a);
+    expect((await call("POST", "/admin/repos", { name: "ta-free", take_alias: a })).status).toBe(303); // no old name to take: just creates
+    expect((await repos.findLiveAlias(env.DB, "ta-g"))!.id).toBe(a);
+  });
+  it("renaming onto a pending import's name says so", async () => {
+    const id = await newRepo("ta-r");
+    const pending = await repos.insertRepo(env.DB, { name: "ta-pending", description: null }, Date.now());
+    await fake.import({ source: { url: "https://example.com/a.git" }, target: { name: pending.storage_name } });
+    const r = await rename(id, "ta-pending");
+    expect(r.status).toBe(422);
+    expect(r.html).toContain("&quot;ta-pending&quot; is still being imported.");
   });
 });
 

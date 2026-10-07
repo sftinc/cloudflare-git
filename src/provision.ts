@@ -1,11 +1,13 @@
 import { artifactsErrorCode } from "./artifacts";
-import { findRepoByName, insertRepo, markProvisioned, retireRepo, type RepoRow } from "./db/repos";
+import { findAlias, findRepoByName, insertRepo, markProvisioned, retireRepo, type RepoRow } from "./db/repos";
 
 export type ProvisionInput =
-  | { kind: "create"; name: string; description: string; defaultBranch: string }
-  | { kind: "import"; name: string; description: string; url: string; branch: string };
+  | { kind: "create"; name: string; description: string; defaultBranch: string; takeAlias?: string }
+  | { kind: "import"; name: string; description: string; url: string; branch: string; takeAlias?: string };
 export type ProvisionStatus = "ready" | "pending" | "missing";
-export type ProvisionResult = { ok: true; repo: RepoRow; status: ProvisionStatus } | { ok: false; error: string; restoreId?: string; clearUrl?: boolean };
+export type ProvisionResult =
+  | { ok: true; repo: RepoRow; status: ProvisionStatus }
+  | { ok: false; error: string; restoreId?: string; clearUrl?: boolean; takeAlias?: string };
 
 const MESSAGES: Record<string, string> = {
   REMOTE_AUTH_REQUIRED: "No public repository at that URL (it may be private or missing). For private repos, create an empty repo and push a mirror (see README).",
@@ -22,6 +24,11 @@ export const DESCRIPTION_MAX = 350; // same as GitHub
 export function validateRepoName(name: string): string | null {
   if (!/^[a-z0-9][a-z0-9-]{1,62}$/.test(name)) return "Use 2-63 lowercase letters, digits or hyphens, starting with a letter or digit.";
   return null;
+}
+
+/** Spec §1a: taking another repo's old name breaks its links and clones, so the admin confirms first. */
+export function aliasWarning(name: string, owner: string) {
+  return `"${name}" is an old name of repo "${owner}": links and clones using "${name}" still reach "${owner}". Taking the name breaks them right away, even if the create or import then fails.`;
 }
 
 function checkInput(input: ProvisionInput): ProvisionResult | null {
@@ -60,7 +67,9 @@ export async function provisionRepo(db: D1Database, art: Artifacts, input: Provi
     if (existing.provisioned_at === null) return { ok: false, error: `"${input.name}" is still being imported.` };
     return { ok: false, error: `A repo named "${input.name}" already exists.` };
   }
-  const repo = await insertRepo(db, { name: input.name, description: input.description || null }, now);
+  const alias = await findAlias(db, input.name);
+  if (alias && alias.repo_id !== input.takeAlias) return { ok: false, error: aliasWarning(input.name, alias.repo_name), takeAlias: alias.repo_id };
+  const repo = await insertRepo(db, { name: input.name, description: input.description || null }, now, alias?.repo_id ?? null);
   let status: ProvisionStatus = "missing";
   let code: string | null = null;
   try {

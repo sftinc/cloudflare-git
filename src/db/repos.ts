@@ -41,6 +41,14 @@ export function findLiveAlias(db: D1Database, name: string) {
     .first<RepoRow>();
 }
 
+/** The live alias with this name, whatever state its repo is in, and that repo's current name. */
+export function findAlias(db: D1Database, name: string) {
+  return db
+    .prepare("SELECT a.repo_id, r.name AS repo_name FROM repo_aliases a JOIN repos r ON r.id = a.repo_id WHERE a.name = ? AND a.deleted_at IS NULL")
+    .bind(name)
+    .first<{ repo_id: string; repo_name: string }>();
+}
+
 export async function listLiveRepos(db: D1Database) {
   const { results } = await db
     .prepare("SELECT * FROM repos WHERE deleted_at IS NULL AND provisioned_at IS NOT NULL ORDER BY name")
@@ -54,13 +62,18 @@ export async function listReposForAdmin(db: D1Database) {
   return results;
 }
 
-export async function insertRepo(db: D1Database, r: { name: string; description: string | null }, now: number) {
+/** With takeAliasFrom, the same batch releases that repo's old name r.name, if it still holds it. */
+export async function insertRepo(db: D1Database, r: { name: string; description: string | null }, now: number, takeAliasFrom: string | null = null) {
   const id = uuidv7(now);
   const row: RepoRow = { id, name: r.name, storage_name: storageNameFor(id), description: r.description, public_at: null, provisioned_at: null, created_at: now, updated_at: now, deleted_at: null };
-  await db
-    .prepare("INSERT INTO repos (id, name, storage_name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
-    .bind(row.id, row.name, row.storage_name, row.description, now, now)
-    .run();
+  await db.batch([
+    ...(takeAliasFrom
+      ? [db.prepare("UPDATE repo_aliases SET deleted_at = ?1 WHERE name = ?2 AND repo_id = ?3 AND deleted_at IS NULL").bind(now, r.name, takeAliasFrom)]
+      : []),
+    db
+      .prepare("INSERT INTO repos (id, name, storage_name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(row.id, row.name, row.storage_name, row.description, now, now),
+  ]);
   return row;
 }
 
@@ -92,15 +105,17 @@ export async function setDeleted(db: D1Database, id: string, deleted: boolean, n
 
 /**
  * Renames a repo and keeps its old name as an alias. Every statement is guarded by the repo's
- * current state, so a stale request or a racing delete changes nothing. Returns whether it renamed.
- * Throws if another repo took the name meanwhile (unique index); D1 rolls the batch back.
+ * current state, so a stale request or a racing delete changes nothing. The new name may be one of
+ * this repo's own old names, or one of takeAliasFrom's; any other repo's live old name blocks it.
+ * Returns whether it renamed. Throws if another repo took the name meanwhile (unique index); D1 rolls the batch back.
  */
-export async function renameRepo(db: D1Database, id: string, newName: string, now: number) {
-  const eligible = "id = ?1 AND deleted_at IS NULL AND provisioned_at IS NOT NULL AND name <> ?2";
+export async function renameRepo(db: D1Database, id: string, newName: string, now: number, takeAliasFrom: string | null = null) {
+  const current = "id = ?1 AND deleted_at IS NULL AND provisioned_at IS NOT NULL AND name <> ?2";
+  const eligible = `${current} AND NOT EXISTS (SELECT 1 FROM repo_aliases WHERE name = ?2 AND deleted_at IS NULL)`;
   const [, , renamed] = await db.batch([
     db
-      .prepare(`UPDATE repo_aliases SET deleted_at = ?3 WHERE name = ?2 AND deleted_at IS NULL AND EXISTS (SELECT 1 FROM repos WHERE ${eligible})`)
-      .bind(id, newName, now),
+      .prepare(`UPDATE repo_aliases SET deleted_at = ?3 WHERE name = ?2 AND deleted_at IS NULL AND repo_id IN (?1, ?4) AND EXISTS (SELECT 1 FROM repos WHERE ${current})`)
+      .bind(id, newName, now, takeAliasFrom),
     db
       .prepare(`INSERT INTO repo_aliases (id, repo_id, name, created_at) SELECT ?4, id, name, ?3 FROM repos WHERE ${eligible}`)
       .bind(id, newName, now, uuidv7(now)),

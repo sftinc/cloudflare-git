@@ -1,12 +1,12 @@
 import { Hono, type Context } from "hono";
 import type { AppEnv } from "../index";
 import { verifyAccessJwt } from "../auth/access-jwt";
-import { findRepoById, findRepoByName, listLiveRepos, listReposForAdmin, renameRepo, retireRepo, setDeleted, setDescription, setPublic } from "../db/repos";
+import { findAlias, findRepoById, findRepoByName, listLiveRepos, listReposForAdmin, renameRepo, retireRepo, setDeleted, setDescription, setPublic } from "../db/repos";
 import { createInvite, deleteInvite, inviteStatus, listInvites, revokeInvite } from "../db/invites";
 import { createPushToken, deletePushToken, listPushTokens, revokePushToken } from "../db/tokens";
 import { createWebhook, deleteWebhook, listWebhooks } from "../db/webhooks";
 import { randomSecret, sha256Hex } from "../lib/crypto";
-import { DESCRIPTION_MAX, provisionRepo, refreshProvisioning, validateRepoName, type ProvisionInput, type ProvisionStatus } from "../provision";
+import { aliasWarning, DESCRIPTION_MAX, provisionRepo, refreshProvisioning, validateRepoName, type ProvisionInput, type ProvisionStatus } from "../provision";
 import { cloneUrl } from "../render/paths";
 import { siteOrigin } from "../lib/site";
 import { page } from "../views/layout";
@@ -57,7 +57,7 @@ async function provision(c: Context<AppEnv>, input: ProvisionInput, values: Repo
     await setPublic(c.env.DB, result.repo.id, values.visibility === "public", Date.now());
     return c.redirect(`/admin/repos/${result.repo.id}`, 303);
   }
-  return admin(c, "New repo · admin", <AdminNewRepo kind={input.kind} error={result.error} values={result.clearUrl ? { ...values, url: "" } : values} restoreId={result.restoreId} />, 422);
+  return admin(c, "New repo · admin", <AdminNewRepo kind={input.kind} error={result.error} values={result.clearUrl ? { ...values, url: "" } : values} restoreId={result.restoreId} takeAlias={result.takeAlias} />, 422);
 }
 
 adminRoutes.get("/", (c) => c.redirect("/admin/repos", 302));
@@ -68,16 +68,16 @@ adminRoutes.get("/repos/new", (c) => admin(c, "New repo · admin", <AdminNewRepo
 adminRoutes.post("/repos", async (c) => {
   const b = await c.req.parseBody();
   const values = { name: str(b.name), description: str(b.description), defaultBranch: str(b.defaultBranch) || "main", visibility: str(b.visibility) };
-  return provision(c, { kind: "create", name: values.name, description: values.description, defaultBranch: values.defaultBranch }, values);
+  return provision(c, { kind: "create", name: values.name, description: values.description, defaultBranch: values.defaultBranch, takeAlias: str(b.take_alias) || undefined }, values);
 });
 
 adminRoutes.post("/import", async (c) => {
   const b = await c.req.parseBody();
   const values = { name: str(b.name), description: str(b.description), url: str(b.url), branch: str(b.branch), visibility: str(b.visibility) };
-  return provision(c, { kind: "import", name: values.name, description: values.description, url: values.url, branch: values.branch }, values);
+  return provision(c, { kind: "import", name: values.name, description: values.description, url: values.url, branch: values.branch, takeAlias: str(b.take_alias) || undefined }, values);
 });
 
-async function repoPage(c: Context<AppEnv>, extra: { secret?: { title: string; value: string }; error?: string; description?: string; name?: string } = {}, status = 200) {
+async function repoPage(c: Context<AppEnv>, extra: { secret?: { title: string; value: string }; error?: string; description?: string; name?: string; takeAlias?: string } = {}, status = 200) {
   const repo = await findRepoById(c.env.DB, c.req.param("id")!);
   if (!repo || (repo.provisioned_at === null && repo.deleted_at !== null)) return c.notFound(); // retired: a failed create, given up
   let s: ProvisionStatus = "ready";
@@ -101,24 +101,39 @@ adminRoutes.post("/repos/:id/description", async (c) => {
 });
 
 adminRoutes.post("/repos/:id/rename", async (c) => {
-  const id = c.req.param("id");
-  const name = str((await c.req.parseBody()).name);
+  const repo = await findRepoById(c.env.DB, c.req.param("id"));
+  if (!repo || repo.deleted_at !== null) return c.notFound();
+  const b = await c.req.parseBody();
+  const name = str(b.name);
+  const takeAlias = str(b.take_alias) || null;
   const invalid = validateRepoName(name);
   if (invalid) return repoPage(c, { error: invalid, name }, 422);
   const taken = await findRepoByName(c.env.DB, name);
-  const exists = { error: `A repo named "${name}" already exists.`, name };
-  if (taken && taken.id !== id) return repoPage(c, exists, 422);
+  if (taken && taken.id !== repo.id) {
+    const error =
+      taken.deleted_at !== null ? `A deleted repo is named "${name}". Restore it, or pick another name.`
+      : taken.provisioned_at === null ? `"${name}" is still being imported.`
+      : `A repo named "${name}" already exists.`;
+    return repoPage(c, { error, name }, 422);
+  }
+  const alias = await findAlias(c.env.DB, name);
+  if (alias && alias.repo_id !== repo.id && alias.repo_id !== takeAlias) {
+    return repoPage(c, { error: aliasWarning(name, alias.repo_name), name, takeAlias: alias.repo_id }, 422);
+  }
   let renamed: boolean;
   try {
-    renamed = await renameRepo(c.env.DB, id, name, Date.now());
+    renamed = await renameRepo(c.env.DB, repo.id, name, Date.now(), takeAlias);
   } catch (err) {
     if (!String(err).includes("UNIQUE")) throw err; // another repo took the name meanwhile
-    return repoPage(c, exists, 422);
+    return repoPage(c, { error: `A repo named "${name}" already exists.`, name }, 422);
   }
-  if (renamed) return c.redirect(`/admin/repos/${id}?renamed=1`, 303);
-  const repo = await findRepoById(c.env.DB, id);
-  if (!repo || repo.deleted_at !== null || repo.provisioned_at === null) return c.notFound();
-  return c.redirect(`/admin/repos/${id}${repo.name === name ? "" : "?renamed=1"}`, 303);
+  if (renamed) return c.redirect(`/admin/repos/${repo.id}?renamed=1`, 303);
+  const current = await findRepoById(c.env.DB, repo.id);
+  if (!current || current.deleted_at !== null || current.provisioned_at === null) return c.notFound();
+  if (current.name === name) return c.redirect(`/admin/repos/${repo.id}`, 303);
+  // Not renamed although the name looked free: another repo's old name appeared meanwhile.
+  const blocking = await findAlias(c.env.DB, name);
+  return repoPage(c, { error: blocking ? aliasWarning(name, blocking.repo_name) : `A repo named "${name}" already exists.`, name, takeAlias: blocking?.repo_id }, 422);
 });
 
 adminRoutes.post("/repos/:id/visibility", async (c) => {
