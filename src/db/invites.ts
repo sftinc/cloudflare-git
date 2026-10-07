@@ -110,10 +110,10 @@ export async function listInvites(db: D1Database) {
   return results;
 }
 
-/** Revoking twice keeps the first time. False if the invite doesn't exist or is deleted. */
+/** Revoking twice keeps the first time, and its updated_at. False if the invite doesn't exist or is deleted. */
 export async function revokeInvite(db: D1Database, id: string, now: number) {
   const res = await db
-    .prepare("UPDATE invites SET revoked_at = COALESCE(revoked_at, ?1), updated_at = ?1 WHERE id = ?2 AND deleted_at IS NULL")
+    .prepare("UPDATE invites SET revoked_at = COALESCE(revoked_at, ?1), updated_at = CASE WHEN revoked_at IS NULL THEN ?1 ELSE updated_at END WHERE id = ?2 AND deleted_at IS NULL")
     .bind(now, id)
     .run();
   return res.meta.changes > 0;

@@ -19,12 +19,19 @@ document.addEventListener("click", (event) => {
 document.addEventListener("submit", (event) => {
   if (event.defaultPrevented) return;
   const buttons = event.target.querySelectorAll("button, input[type=submit]");
-  setTimeout(() => buttons.forEach((b) => (b.disabled = true)));
+  setTimeout(() => buttons.forEach((b) => {
+    if (b.disabled) return; // disabled in the markup: not ours to re-enable
+    b.disabled = true;
+    b.dataset.autoDisabled = "";
+  }));
 });
-// Back/forward cache restores the page as it was: re-enable, then re-check confirm dialogs.
+// Back/forward cache restores the page as it was: re-enable what the submit disabled, then re-check confirm dialogs.
 window.addEventListener("pageshow", (event) => {
   if (!event.persisted) return;
-  document.querySelectorAll("button:disabled, input[type=submit]:disabled").forEach((b) => (b.disabled = false));
+  document.querySelectorAll("[data-auto-disabled]").forEach((b) => {
+    b.disabled = false;
+    delete b.dataset.autoDisabled;
+  });
   document.querySelectorAll("form[data-confirm]").forEach(updateConfirm);
 });
 

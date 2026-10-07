@@ -57,9 +57,10 @@ describe("repos", () => {
 describe("invites", () => {
   it("revoking twice keeps the first time; revoke and delete say whether the invite exists", async () => {
     const id = await invites.createInvite(db, { label: "Twice", codeHash: "c-twice", accessMs: null, redeemByAt: T + HOUR, repoIds: [] }, T);
-    expect(await invites.revokeInvite(db, id, T)).toBe(true);
+    expect(await invites.revokeInvite(db, id, T + 1)).toBe(true);
     expect(await invites.revokeInvite(db, id, T + 5)).toBe(true);
-    expect((await invites.findInviteByCodeHash(db, "c-twice"))!.revoked_at).toBe(T);
+    const inv = (await invites.findInviteByCodeHash(db, "c-twice"))!;
+    expect([inv.revoked_at, inv.updated_at]).toEqual([T + 1, T + 1]);
     expect(await invites.deleteInvite(db, id, T)).toBe(true);
     expect(await invites.deleteInvite(db, id, T)).toBe(false);
     expect(await invites.revokeInvite(db, id, T)).toBe(false);
@@ -117,9 +118,10 @@ describe("invites", () => {
 describe("push tokens", () => {
   it("revoking twice keeps the first time; revoke and delete say whether the token exists", async () => {
     const id = await tokens.createPushToken(db, { name: "twice", tokenHash: "h-twice", repoIds: [], allRepos: true }, T);
-    expect(await tokens.revokePushToken(db, id, T)).toBe(true);
+    expect(await tokens.revokePushToken(db, id, T + 1)).toBe(true);
     expect(await tokens.revokePushToken(db, id, T + 5)).toBe(true);
-    expect((await tokens.listPushTokens(db)).find((t) => t.id === id)!.revoked_at).toBe(T);
+    const tok = (await tokens.listPushTokens(db)).find((t) => t.id === id)!;
+    expect([tok.revoked_at, tok.updated_at]).toEqual([T + 1, T + 1]);
     expect(await tokens.deletePushToken(db, id, T)).toBe(true);
     expect(await tokens.deletePushToken(db, id, T)).toBe(false);
     expect(await tokens.revokePushToken(db, id, T)).toBe(false);

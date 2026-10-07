@@ -5,6 +5,7 @@ import { DAY_MS, purgeDeletedRepos, restoreDays } from "../src/purge";
 import * as repos from "../src/db/repos";
 import * as invites from "../src/db/invites";
 import * as tokens from "../src/db/tokens";
+import * as hooks from "../src/db/webhooks";
 import { artifactsDevError, artifactsError, FakeArtifacts } from "./helpers/fake-artifacts";
 import { makeEnv } from "./helpers/env";
 
@@ -39,10 +40,13 @@ const aliasDeletedAt = async (name: string) =>
   (await db.prepare("SELECT deleted_at FROM repo_aliases WHERE name = ?").bind(name).first<{ deleted_at: number | null }>())!.deleted_at;
 const grantDeletedAt = async (table: "invite_repos" | "push_token_repos", repoId: string) =>
   (await db.prepare(`SELECT deleted_at FROM ${table} WHERE repo_id = ?`).bind(repoId).first<{ deleted_at: number | null }>())!.deleted_at;
+const hookDeletedAt = async (repoId: string) =>
+  (await db.prepare("SELECT deleted_at FROM webhooks WHERE repo_id = ?").bind(repoId).first<{ deleted_at: number | null }>())!.deleted_at;
 
 describe("restoreDays", () => {
   it.each([
     [undefined, 30], ["", 30], [" 7", 30], ["abc", 30], ["-1", 30], ["1.5", 30], ["0", 0], ["7", 7], ["07", 7],
+    ["90", 90], ["91", 90], ["9".repeat(400), 90],
   ])("RESTORE_DAYS %j is %i days", (value, days) => {
     expect(restoreDays({ RESTORE_DAYS: value })).toBe(days);
   });
@@ -167,12 +171,13 @@ describe("purgeDeletedRepos", () => {
 
   // Simulates a restore the route can't make (Restore stops at the window, and the purge starts 24 hours
   // later). Only the D1 guards are under test.
-  it("a repo restored after the select is not marked purged and keeps its aliases and grants", async () => {
+  it("a repo restored after the select is not marked purged and keeps its aliases, grants and webhooks", async () => {
     quietLog();
     const id = await deletedRepo("pg-race", NOW - 40 * DAY_MS);
     await addAlias(id, "pg-race-was");
     await invites.createInvite(db, { label: "pg-race-inv", codeHash: "pg-race-inv", accessMs: null, redeemByAt: NOW, repoIds: [id] }, NOW);
     await tokens.createPushToken(db, { name: "pg-race-tok", tokenHash: "pg-race-tok", repoIds: [id] }, NOW);
+    await hooks.createWebhook(db, { repoId: id, url: "https://pg.test/race", branch: null, secret: "k" }, NOW);
     const realDelete = fake.delete.bind(fake);
     fake.delete = async (name: string) => {
       await repos.setDeleted(db, id, false, NOW); // the owner restores it while the purge runs
@@ -184,21 +189,25 @@ describe("purgeDeletedRepos", () => {
     expect(await aliasDeletedAt("pg-race-was")).toBeNull();
     expect(await grantDeletedAt("invite_repos", id)).toBeNull();
     expect(await grantDeletedAt("push_token_repos", id)).toBeNull();
+    expect(await hookDeletedAt(id)).toBeNull();
   });
 
-  it("a purged repo's grants are soft-deleted and drop out of the invite and token lists", async () => {
+  it("a purged repo's grants and webhooks are soft-deleted; grants drop out of the invite and token lists", async () => {
     quietLog();
     const id = await deletedRepo("pg-grants", NOW - 40 * DAY_MS);
     const other = await repos.insertRepo(db, { name: "pg-grants-other", description: null }, NOW);
     await repos.markProvisioned(db, other.id, NOW);
     const inv = await invites.createInvite(db, { label: "pg-inv", codeHash: "pg-inv-hash", accessMs: null, redeemByAt: NOW, repoIds: [id] }, NOW);
     const tok = await tokens.createPushToken(db, { name: "pg-tok", tokenHash: "pg-tok-hash", repoIds: [id] }, NOW);
+    await hooks.createWebhook(db, { repoId: id, url: "https://pg.test/hook", branch: null, secret: "k" }, NOW);
     expect((await invites.listInvites(db)).find((i) => i.id === inv)!.repo_names).toBe("pg-grants");
 
     expect(await purgeDeletedRepos(db, art(), 30, NOW)).toBe(1);
 
     expect(await grantDeletedAt("invite_repos", id)).toBe(NOW);
     expect(await grantDeletedAt("push_token_repos", id)).toBe(NOW);
+    expect(await hookDeletedAt(id)).toBe(NOW);
+    expect(await hooks.listWebhooks(db, id)).toEqual([]);
     const invite = (await invites.listInvites(db)).find((i) => i.id === inv)!;
     expect([invite.repo_names, invite.all_repos_at, invite.revoked_at]).toEqual(["", null, null]);
     const token = (await tokens.listPushTokens(db)).find((t) => t.id === tok)!;

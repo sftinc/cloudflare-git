@@ -13,6 +13,9 @@ export type PushTokenRow = {
   deleted_at: number | null;
 };
 
+/** Token t is not revoked, deleted or expired at ?2. */
+const VALID = "t.revoked_at IS NULL AND t.deleted_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > ?2)";
+
 export async function createPushToken(db: D1Database, t: { name: string; tokenHash: string; repoIds: string[]; allRepos?: boolean; expiresAt?: number | null }, now: number) {
   const id = uuidv7(now);
   await db.batch([
@@ -29,11 +32,11 @@ export async function findValidPushTokenId(db: D1Database, tokenHash: string, re
   const row = await db
     .prepare(
       `SELECT t.id FROM push_tokens t
-       WHERE t.token_hash = ?1 AND t.revoked_at IS NULL AND t.deleted_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > ?3)
+       WHERE t.token_hash = ?1 AND ${VALID}
          AND (t.all_repos_at IS NOT NULL
-              OR EXISTS (SELECT 1 FROM push_token_repos r WHERE r.push_token_id = t.id AND r.repo_id = ?2 AND r.deleted_at IS NULL))`,
+              OR EXISTS (SELECT 1 FROM push_token_repos r WHERE r.push_token_id = t.id AND r.repo_id = ?3 AND r.deleted_at IS NULL))`,
     )
-    .bind(tokenHash, repoId, now)
+    .bind(tokenHash, now, repoId)
     .first<{ id: string }>();
   return row?.id ?? null;
 }
@@ -54,10 +57,10 @@ export async function listPushTokens(db: D1Database) {
   return results;
 }
 
-/** Revoking twice keeps the first time. False if the token doesn't exist or is deleted. */
+/** Revoking twice keeps the first time, and its updated_at. False if the token doesn't exist or is deleted. */
 export async function revokePushToken(db: D1Database, id: string, now: number) {
   const res = await db
-    .prepare("UPDATE push_tokens SET revoked_at = COALESCE(revoked_at, ?1), updated_at = ?1 WHERE id = ?2 AND deleted_at IS NULL")
+    .prepare("UPDATE push_tokens SET revoked_at = COALESCE(revoked_at, ?1), updated_at = CASE WHEN revoked_at IS NULL THEN ?1 ELSE updated_at END WHERE id = ?2 AND deleted_at IS NULL")
     .bind(now, id)
     .run();
   return res.meta.changes > 0;
@@ -71,7 +74,7 @@ export async function deletePushToken(db: D1Database, id: string, now: number) {
 /** A token that is not revoked, deleted or expired, whatever repos it covers. */
 export async function isValidPushToken(db: D1Database, tokenHash: string, now: number) {
   const row = await db
-    .prepare("SELECT 1 AS ok FROM push_tokens WHERE token_hash = ?1 AND revoked_at IS NULL AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > ?2)")
+    .prepare(`SELECT 1 AS ok FROM push_tokens t WHERE t.token_hash = ?1 AND ${VALID}`)
     .bind(tokenHash, now)
     .first();
   return row !== null;
