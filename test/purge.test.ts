@@ -40,8 +40,9 @@ const aliasDeletedAt = async (name: string) =>
   (await db.prepare("SELECT deleted_at FROM repo_aliases WHERE name = ?").bind(name).first<{ deleted_at: number | null }>())!.deleted_at;
 const grantDeletedAt = async (table: "invite_repos" | "push_token_repos", repoId: string) =>
   (await db.prepare(`SELECT deleted_at FROM ${table} WHERE repo_id = ?`).bind(repoId).first<{ deleted_at: number | null }>())!.deleted_at;
-const hookDeletedAt = async (repoId: string) =>
-  (await db.prepare("SELECT deleted_at FROM webhooks WHERE repo_id = ?").bind(repoId).first<{ deleted_at: number | null }>())!.deleted_at;
+const hook = async (repoId: string) =>
+  (await db.prepare("SELECT deleted_at, updated_at FROM webhooks WHERE repo_id = ?").bind(repoId).first<{ deleted_at: number | null; updated_at: number }>())!;
+const hookDeletedAt = async (repoId: string) => (await hook(repoId)).deleted_at;
 
 describe("restoreDays", () => {
   it.each([
@@ -199,14 +200,14 @@ describe("purgeDeletedRepos", () => {
     await repos.markProvisioned(db, other.id, NOW);
     const inv = await invites.createInvite(db, { label: "pg-inv", codeHash: "pg-inv-hash", accessMs: null, redeemByAt: NOW, repoIds: [id] }, NOW);
     const tok = await tokens.createPushToken(db, { name: "pg-tok", tokenHash: "pg-tok-hash", repoIds: [id] }, NOW);
-    await hooks.createWebhook(db, { repoId: id, url: "https://pg.test/hook", branch: null, secret: "k" }, NOW);
+    await hooks.createWebhook(db, { repoId: id, url: "https://pg.test/hook", branch: null, secret: "k" }, NOW - DAY_MS);
     expect((await invites.listInvites(db)).find((i) => i.id === inv)!.repo_names).toBe("pg-grants");
 
     expect(await purgeDeletedRepos(db, art(), 30, NOW)).toBe(1);
 
     expect(await grantDeletedAt("invite_repos", id)).toBe(NOW);
     expect(await grantDeletedAt("push_token_repos", id)).toBe(NOW);
-    expect(await hookDeletedAt(id)).toBe(NOW);
+    expect(await hook(id)).toEqual({ deleted_at: NOW, updated_at: NOW });
     expect(await hooks.listWebhooks(db, id)).toEqual([]);
     const invite = (await invites.listInvites(db)).find((i) => i.id === inv)!;
     expect([invite.repo_names, invite.all_repos_at, invite.revoked_at]).toEqual(["", null, null]);

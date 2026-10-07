@@ -229,8 +229,10 @@ adminRoutes.post("/repos/:id/discard", async (c) => {
   }
   if (status === "ready") return c.redirect(`/admin/repos/${repo.id}`, 303);
   if (status === "pending") return repoPage(c, { error: "It's still importing." }, 422);
-  // Not retired: it is no longer pending (created meanwhile), so its page shows what it is now.
-  if (!(await retireRepo(c.env.DB, repo.id, Date.now()))) return c.redirect(`/admin/repos/${repo.id}`, 303);
+  // Not retired: created meanwhile goes to its page; already retired (another Discard) goes to the list.
+  if (!(await retireRepo(c.env.DB, repo.id, Date.now())) && (await findRepoById(c.env.DB, repo.id))?.provisioned_at != null) {
+    return c.redirect(`/admin/repos/${repo.id}`, 303);
+  }
   return c.redirect("/admin/repos", 303);
 });
 

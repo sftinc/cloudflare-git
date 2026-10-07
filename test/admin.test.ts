@@ -326,6 +326,23 @@ describe("failed creates and imports", () => {
     expect([r.status, r.location]).toEqual([303, `/admin/repos/${row.id}`]);
     expect((await repos.findRepoById(env.DB, row.id))!.name).toBe("fc-late");
   });
+  it("Discard of a repo another Discard retired first goes to the list", async () => {
+    const row = await repos.insertRepo(env.DB, { name: "fc-twice", description: null }, Date.now());
+    vi.spyOn(fake, "get").mockImplementation(async () => {
+      await repos.retireRepo(env.DB, row.id, Date.now()); // the other Discard wins
+      throw artifactsError("NOT_FOUND");
+    });
+    const r = await call("POST", `/admin/repos/${row.id}/discard`, {});
+    expect([r.status, r.location]).toEqual([303, "/admin/repos"]);
+  });
+  it("a pending repo's page opens as Import failed when the check throws", async () => {
+    const row = await repos.insertRepo(env.DB, { name: "fc-page", description: null }, Date.now());
+    vi.spyOn(fake, "get").mockRejectedValue(artifactsError("INTERNAL_ERROR"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const r = await call("GET", `/admin/repos/${row.id}`);
+    expect(r.status).toBe(200);
+    expect(r.html).toContain("Import failed");
+  });
   it("Discard 404s for a created, a deleted or an unknown repo", async () => {
     const id = (await call("POST", "/admin/repos", { name: "fc-made" })).location!.split("/").pop()!;
     expect((await call("POST", `/admin/repos/${id}/discard`, {})).status).toBe(404);

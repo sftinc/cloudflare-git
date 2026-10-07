@@ -38,7 +38,7 @@ export async function purgeDeletedRepos(db: D1Database, art: Artifacts, days: nu
         db.prepare(`UPDATE repo_aliases SET deleted_at = ?2 WHERE repo_id = ?1 AND deleted_at IS NULL AND ${eligible}`).bind(r.id, now),
         db.prepare(`UPDATE invite_repos SET deleted_at = ?2 WHERE repo_id = ?1 AND deleted_at IS NULL AND ${eligible}`).bind(r.id, now),
         db.prepare(`UPDATE push_token_repos SET deleted_at = ?2 WHERE repo_id = ?1 AND deleted_at IS NULL AND ${eligible}`).bind(r.id, now),
-        db.prepare(`UPDATE webhooks SET deleted_at = ?2 WHERE repo_id = ?1 AND deleted_at IS NULL AND ${eligible}`).bind(r.id, now),
+        db.prepare(`UPDATE webhooks SET deleted_at = ?2, updated_at = ?2 WHERE repo_id = ?1 AND deleted_at IS NULL AND ${eligible}`).bind(r.id, now),
         db.prepare("UPDATE repos SET purged_at = ?2, name = '~' || id WHERE id = ?1 AND deleted_at IS NOT NULL AND purged_at IS NULL").bind(r.id, now),
       ]);
     } catch (err) {
