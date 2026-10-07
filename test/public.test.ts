@@ -202,7 +202,8 @@ describe("files", () => {
     const r = await html("/r/site/blob/main/README.md?source=1");
     expect(r.body).toContain('<div class="ln" aria-hidden="true">1\n2\n3\n4\n5</div>');
     expect(r.body).toContain("5 lines · ");
-    expect(r.body).toContain('data-copy-url="/r/site/blob/main/README.md?raw=1"');
+    expect(r.body).toContain('data-copy-url="/r/site/blob/main/README.md?raw"');
+    expect(r.body).toContain('<a class="btn" href="/r/site/blob/main/README.md?raw">Raw</a>');
   });
   it("switches markdown between Preview and Code", async () => {
     const preview = await html("/r/site/blob/main/docs/guide.md");
@@ -231,7 +232,9 @@ describe("files", () => {
     const raw = await html("/r/site/blob/main/data.bin?raw=1");
     expect(raw.headers.get("content-type")).toBe("application/octet-stream");
     expect(raw.headers.get("content-disposition")).toBe("attachment; filename=\"data.bin\"; filename*=UTF-8''data.bin");
-    expect((await html("/r/site/blob/main/data.bin")).body).toContain("Binary file not shown");
+    const view = (await html("/r/site/blob/main/data.bin")).body;
+    expect(view).toContain("Binary file not shown");
+    expect(view).toContain('<a href="/r/site/blob/main/data.bin?raw">Download</a>');
   });
   it("binary downloads with non-ASCII names do not crash", async () => {
     const r = await html("/r/site/blob/main/%E2%9C%93%20data.bin?raw=1");
@@ -239,15 +242,27 @@ describe("files", () => {
     expect(r.headers.get("content-type")).toBe("application/octet-stream");
     expect(r.headers.get("content-disposition")).toContain("filename*=UTF-8''%E2%9C%93%20data.bin");
   });
-  it("files Artifacts cannot read show a too-large page", async () => {
-    fake.failNext = { method: "readFile", code: "INTERNAL_ERROR" };
-    const r = await html("/r/site/blob/main/big.txt");
-    expect(r.status).toBe(200);
-    expect(r.body).toContain("File too large to display");
+  it("a file Artifacts cannot read gets a 413 page around it, and a 413 text for ?raw", async () => {
+    for (const code of ["INTERNAL_ERROR", "MEMORY_LIMIT"]) {
+      fake.failNext = { method: "readFile", code };
+      const view = await html("/r/site/blob/main/big.txt");
+      expect(view.status).toBe(413);
+      expect(view.body).toContain("This file is too large to show or download from the web (the limit is about 20 MB). Clone the repository to get it.");
+      expect(view.body).toContain("<span>big.txt</span>"); // breadcrumb
+      expect(view.body).toContain('class="file-tree"');
+      expect(view.body).toContain('data-copy="https://git.test/r/site.git"'); // clone box
+      fake.failNext = { method: "readFile", code };
+      const raw = await html("/r/site/blob/main/big.txt?raw");
+      expect(raw.status).toBe(413);
+      expect(raw.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+      expect(raw.body).toContain("Clone the repository to get it.");
+      expect(raw.body).toContain("git clone https://git.test/r/site.git");
+    }
   });
   it("large files are truncated with a notice", async () => {
     const r = await html("/r/site/blob/main/big.txt");
     expect(r.body).toContain("Showing the first 1 MB");
+    expect(r.body).toContain('<a href="/r/site/blob/main/big.txt?raw">View the whole file</a>');
     expect(r.body.length).toBeLessThan(1_200_000);
   });
 });

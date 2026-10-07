@@ -66,7 +66,7 @@ export class FakeArtifacts {
   /** Alternates error shapes so code under test must handle both (spike finding). */
   private errorCount = 0;
   fail(code: string): Error {
-    return this.errorCount++ % 2 === 0 ? artifactsDevError(code) : artifactsError(code);
+    return code in DEV_MESSAGES && this.errorCount++ % 2 === 0 ? artifactsDevError(code) : artifactsError(code);
   }
 
   maybeFail(method: string) {

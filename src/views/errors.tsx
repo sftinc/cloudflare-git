@@ -20,13 +20,6 @@ export const ServerError = () => (
   </section>
 );
 
-export const FileTooLarge = (props: { path: string }) => (
-  <section class="message">
-    <h1>File too large to display</h1>
-    <p class="muted">{props.path} is too large for the storage service to read (about 20 MB is the limit). Clone the repository to get it.</p>
-  </section>
-);
-
 export const InviteInvalid = () => (
   <section class="message">
     <h1>This invite is no longer valid</h1>

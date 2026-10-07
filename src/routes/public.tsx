@@ -8,8 +8,7 @@ import { renderMarkdown } from "../render/markdown";
 import { cloneUrl, decodePath, repoHref, splitRefPath } from "../render/paths";
 import { siteOrigin } from "../lib/site";
 import { page } from "../views/layout";
-import { BlobView, Commits, EmptyRepo, Home, TreeView } from "../views/public";
-import { FileTooLarge } from "../views/errors";
+import { BlobView, Commits, EmptyRepo, Home, TOO_LARGE, TreeView } from "../views/public";
 
 export const MAX_VIEW_BYTES = 1_048_576;
 const PER_PAGE = 30;
@@ -113,23 +112,37 @@ publicRoutes.get(`/r/:repo{${NAME}}/blob/*`, async (c) => {
   const at = r !== null ? splitRefPath(r, l.refs) : null;
   if (!at || !at.path) return c.notFound();
   using h = await c.env.ARTIFACTS.get(l.repo.storage_name);
+  // The commit and folders come before the file, so a file too large to read still gets the normal page around it.
+  const [commit] = await h.log({ ref: at.ref.sha, limit: 1 });
+  if (!commit) return c.notFound();
+  const dir = at.path.split("/").slice(0, -1).join("/");
+  const levels = await readLevels(h, commit.treeHash, dir);
+  if (!levels) return c.notFound();
+  const filename = at.path.split("/").pop()!;
+  const wantsRaw = c.req.query("raw") !== undefined;
   let blob: Blob | null;
   try {
     blob = await h.readFile({ ref: at.ref.sha, path: at.path });
   } catch (err) {
-    // Spike: files of ~25 MB and up throw INTERNAL_ERROR (or MEMORY_LIMIT) instead of returning.
+    // Spike: files of ~20 MB and up throw INTERNAL_ERROR (or MEMORY_LIMIT) instead of returning.
     const code = artifactsErrorCode(err);
-    if (code === "INTERNAL_ERROR" || code === "MEMORY_LIMIT") return page(c, "File too large", <FileTooLarge path={at.path} />);
-    throw err;
+    if (code !== "INTERNAL_ERROR" && code !== "MEMORY_LIMIT") throw err;
+    if (wantsRaw) {
+      return new Response(`${TOO_LARGE}\n\ngit clone ${l.cloneUrl}\n`, { status: 413, headers: { "Content-Type": "text/plain; charset=utf-8" } });
+    }
+    return page(
+      c,
+      `${filename} · ${l.repo.name}`,
+      <BlobView repo={l.repo} branch={at.ref.name} kind={at.ref.kind} branches={l.branches} tags={l.tags} path={at.path} levels={levels} size={0} lines={0}
+        binary={false} truncated={false} html={null} markdown={false} showingSource={false} tooLarge cloneUrl={l.cloneUrl} />,
+      413,
+      { wide: true },
+    );
   }
   if (!blob) return c.notFound();
-  const [commit] = await h.log({ ref: at.ref.sha, limit: 1 });
-  const levels = commit && (await readLevels(h, commit.treeHash, at.path.split("/").slice(0, -1).join("/")));
-  if (!levels) return c.notFound();
   const binary = new Uint8Array(await blob.slice(0, 8192).arrayBuffer()).includes(0);
-  const filename = at.path.split("/").pop()!;
 
-  if (c.req.query("raw") !== undefined) {
+  if (wantsRaw) {
     const headers: Record<string, string> = { "Content-Security-Policy": "default-src 'none'; sandbox" };
     if (binary) {
       headers["Content-Type"] = "application/octet-stream";
@@ -140,7 +153,6 @@ publicRoutes.get(`/r/:repo{${NAME}}/blob/*`, async (c) => {
 
   const markdown = /\.md$/i.test(filename);
   const showingSource = c.req.query("source") !== undefined;
-  const dir = at.path.split("/").slice(0, -1).join("/");
   let html: string | null = null;
   let lines = 0;
   if (!binary) {
@@ -152,7 +164,7 @@ publicRoutes.get(`/r/:repo{${NAME}}/blob/*`, async (c) => {
     c,
     `${filename} · ${l.repo.name}`,
     <BlobView repo={l.repo} branch={at.ref.name} kind={at.ref.kind} branches={l.branches} tags={l.tags} path={at.path} levels={levels} size={blob.size} lines={lines}
-      binary={binary} truncated={!binary && blob.size > MAX_VIEW_BYTES} html={html} markdown={markdown} showingSource={showingSource} />,
+      binary={binary} truncated={!binary && blob.size > MAX_VIEW_BYTES} html={html} markdown={markdown} showingSource={showingSource} tooLarge={false} cloneUrl={l.cloneUrl} />,
     200,
     { wide: true },
   );

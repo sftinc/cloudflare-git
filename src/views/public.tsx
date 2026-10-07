@@ -6,6 +6,7 @@ import { blobHref, commitsHref, repoHref, treeHref } from "../render/paths";
 import { Book, Branch, Chevron, ChevronRight, Clock, Copy, Download, File, Folder, Upload } from "./icons";
 
 export const NO_REPOS_OWNER = "Create an empty repository to push to, or import one from another host.";
+export const TOO_LARGE = "This file is too large to show or download from the web (the limit is about 20 MB). Clone the repository to get it.";
 
 export const fmtDate = (sec: number) => new Date(sec * 1000).toISOString().slice(0, 10);
 export const fmtSize = (n: number) => (n < 1024 ? `${n} B` : n < 1_048_576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1_048_576).toFixed(1)} MB`);
@@ -259,7 +260,7 @@ export function TreeView(props: {
 
 export function BlobView(props: {
   repo: RepoRow; branch: string; kind: Ref["kind"]; branches: Ref[]; tags: Ref[]; path: string; levels: ArtifactsTreeEntry[][]; size: number; lines: number;
-  binary: boolean; truncated: boolean; html: string | null; markdown: boolean; showingSource: boolean;
+  binary: boolean; truncated: boolean; html: string | null; markdown: boolean; showingSource: boolean; tooLarge: boolean; cloneUrl: string;
 }) {
   const { repo, branch, path } = props;
   const base = blobHref(repo.name, branch, path);
@@ -273,32 +274,39 @@ export function BlobView(props: {
         <FileTree repo={repo.name} branch={branch} levels={props.levels} current={path} />
         <div class="repo-main">
           <Crumbs repo={repo.name} branch={branch} path={path} />
-          <div class="card file">
-            <div class="file-head">
-              <span class="muted">{props.binary ? fmtSize(props.size) : `${plural(props.lines, "line")} · ${fmtSize(props.size)}`}</span>
-              <span class="file-actions">
-                {props.markdown && (
-                  <nav class="segctl" aria-label="View">
-                    <a href={base} aria-current={preview ? "page" : undefined}>Preview</a>
-                    <a href={`${base}?source=1`} aria-current={preview ? undefined : "page"}>Code</a>
-                  </nav>
-                )}
-                <a class="btn" href={`${base}?raw=1`}>Raw</a>
-                {!props.binary && <button type="button" class="btn" data-copy-url={`${base}?raw=1`} aria-label="Copy file" title="Copy file"><Copy /></button>}
-              </span>
-            </div>
-            {props.truncated && <p class="notice">Showing the first 1 MB. <a href={`${base}?raw=1`}>View the whole file</a>.</p>}
-            {props.binary ? (
-              <p class="notice">Binary file not shown. <a href={`${base}?raw=1`}>Download</a></p>
-            ) : preview ? (
-              <article class="markdown">{raw(props.html ?? "")}</article>
-            ) : (
-              <div class="code-lines">
-                <div class="ln" aria-hidden="true">{Array.from({ length: Math.max(1, props.lines) }, (_, i) => i + 1).join("\n")}</div>
-                <pre class="code"><code class="hljs">{raw(props.html ?? "")}</code></pre>
+          {props.tooLarge ? (
+            <>
+              <div class="card file"><p class="notice">{TOO_LARGE}</p></div>
+              <CloneBox url={props.cloneUrl} />
+            </>
+          ) : (
+            <div class="card file">
+              <div class="file-head">
+                <span class="muted">{props.binary ? fmtSize(props.size) : `${plural(props.lines, "line")} · ${fmtSize(props.size)}`}</span>
+                <span class="file-actions">
+                  {props.markdown && (
+                    <nav class="segctl" aria-label="View">
+                      <a href={base} aria-current={preview ? "page" : undefined}>Preview</a>
+                      <a href={`${base}?source=1`} aria-current={preview ? undefined : "page"}>Code</a>
+                    </nav>
+                  )}
+                  <a class="btn" href={`${base}?raw`}>Raw</a>
+                  {!props.binary && <button type="button" class="btn" data-copy-url={`${base}?raw`} aria-label="Copy file" title="Copy file"><Copy /></button>}
+                </span>
               </div>
-            )}
-          </div>
+              {props.truncated && <p class="notice">Showing the first 1 MB. <a href={`${base}?raw`}>View the whole file</a>.</p>}
+              {props.binary ? (
+                <p class="notice">Binary file not shown. <a href={`${base}?raw`}>Download</a></p>
+              ) : preview ? (
+                <article class="markdown">{raw(props.html ?? "")}</article>
+              ) : (
+                <div class="code-lines">
+                  <div class="ln" aria-hidden="true">{Array.from({ length: Math.max(1, props.lines) }, (_, i) => i + 1).join("\n")}</div>
+                  <pre class="code"><code class="hljs">{raw(props.html ?? "")}</code></pre>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </>
