@@ -10,9 +10,11 @@ import * as hooks from "../src/db/webhooks";
 import { FakeArtifacts } from "./helpers/fake-artifacts";
 import { request } from "./helpers/env";
 import { ownerEnv, ownerToken } from "./helpers/jwt";
+import { DAY_MS } from "../src/purge";
 
 let fake: FakeArtifacts;
 let jwt: string;
+let extraEnv: Record<string, unknown> = {}; // e.g. { RESTORE_DAYS: "7" } for one test
 const secretOf = (html: string) => /<code id="secret">([^<]+)<\/code>/.exec(html)?.[1];
 const DELETE_FORM = { confirm: "DELETE" };
 const MAKE_PUBLIC_FORM = { public: "1", ack: ["browse", "history", "copies"] };
@@ -22,6 +24,7 @@ beforeEach(async () => {
   resetAccessKeys();
   fake = new FakeArtifacts();
   jwt = await ownerToken();
+  extraEnv = {};
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -33,7 +36,7 @@ async function call(method: string, path: string, form?: Record<string, string |
     redirect: "manual",
     headers: { "cf-access-jwt-assertion": jwt, Origin: "https://git.test", ...(form ? { "Content-Type": "application/x-www-form-urlencoded" } : {}), ...headers },
     body: form ? body : undefined,
-  }, await ownerEnv({ ARTIFACTS: fake }));
+  }, await ownerEnv({ ARTIFACTS: fake, ...extraEnv }));
   return { status: res.status, location: res.headers.get("location"), html: await res.text(), cookie: res.headers.get("set-cookie") };
 }
 
@@ -732,6 +735,88 @@ describe("form checks", () => {
     expect(r.status).toBe(422);
     expect(r.html).toContain(message);
     expect((await invites.listInvites(env.DB)).map((i) => i.label)).not.toContain(`w-${field}-${value}`);
+  });
+});
+
+describe("restore window", () => {
+  const newRepo = async (name: string) => (await call("POST", "/admin/repos", { name })).location!.split("/").pop()!;
+  const deletedAt = async (name: string, at: number) => {
+    const id = await newRepo(name);
+    await repos.setDeleted(env.DB, id, true, at);
+    return id;
+  };
+  const markPurged = (id: string) => env.DB.prepare("UPDATE repos SET purged_at = ?1, name = '~' || id WHERE id = ?2").bind(Date.now(), id).run();
+
+  it("lists deleted repos with the days left, only inside the window", async () => {
+    const now = await deletedAt("rw-now", Date.now());
+    const recent = await deletedAt("rw-recent", Date.now() - 27.5 * DAY_MS);
+    const last = await deletedAt("rw-last", Date.now() - 29.5 * DAY_MS);
+    const expired = await deletedAt("rw-expired", Date.now() - 30.5 * DAY_MS);
+    const purged = await deletedAt("rw-purged", Date.now() - 40 * DAY_MS);
+    await markPurged(purged);
+    const html = (await call("GET", "/admin/repos")).html;
+    expect(html).toMatch(/rw-now<\/td><td class="muted">deleted \d{4}-\d\d-\d\d · can be restored for 30 more days<\/td>/);
+    expect(html).toMatch(/rw-recent<\/td><td class="muted">deleted \d{4}-\d\d-\d\d · can be restored for 3 more days<\/td>/);
+    expect(html).toMatch(/rw-last<\/td><td class="muted">deleted \d{4}-\d\d-\d\d · can be restored for 1 more day<\/td>/);
+    expect(html).not.toMatch(/(?<!\d)0 more days/);
+    for (const id of [now, recent, last]) expect(html).toContain(`/admin/repos/${id}/restore`);
+    expect(html).not.toContain("rw-expired");
+    for (const id of [expired, purged]) expect(html).not.toContain(id);
+  });
+
+  it("past the window: no Restore button, and Restore answers 422 and changes nothing", async () => {
+    const id = await deletedAt("rw-late", Date.now() - 31 * DAY_MS);
+    const page = await call("GET", `/admin/repos/${id}`);
+    expect(page.status).toBe(200);
+    expect(page.html).toContain("Deleted more than 30 days ago: it can&#39;t be restored and will be permanently deleted soon.");
+    expect(page.html).not.toContain(`/admin/repos/${id}/restore`);
+    const before = await repos.findRepoById(env.DB, id);
+    const r = await call("POST", `/admin/repos/${id}/restore`, {});
+    expect(r.status).toBe(422);
+    expect(r.html).toContain("This repo was deleted more than 30 days ago and can&#39;t be restored.");
+    expect(r.html).toContain("Deleted more than 30 days ago: it can&#39;t be restored");
+    expect(r.html).not.toContain(`/admin/repos/${id}/restore`);
+    expect(await repos.findRepoById(env.DB, id)).toEqual(before);
+  });
+
+  it("with RESTORE_DAYS=0 nothing is listed and nothing can be restored", async () => {
+    extraEnv = { RESTORE_DAYS: "0" };
+    const id = await newRepo("rw-zero");
+    expect((await call("POST", `/admin/repos/${id}/delete`, DELETE_FORM)).status).toBe(303);
+    expect((await call("GET", "/admin/repos")).html).not.toContain("<h2>Deleted</h2>");
+    const page = await call("GET", `/admin/repos/${id}`);
+    expect(page.html).toContain("Deleted repos can&#39;t be restored: it will be permanently deleted soon.");
+    expect(page.html).not.toContain(`/admin/repos/${id}/restore`);
+    const r = await call("POST", `/admin/repos/${id}/restore`, {});
+    expect(r.status).toBe(422);
+    expect(r.html).toContain("Deleted repos can&#39;t be restored.");
+    expect((await repos.findRepoById(env.DB, id))!.deleted_at).not.toBeNull();
+  });
+
+  it("RESTORE_DAYS=7 sets the window for the list, the repo page and Restore", async () => {
+    extraEnv = { RESTORE_DAYS: "7" };
+    const inside = await deletedAt("rw-seven-in", Date.now() - 6.5 * DAY_MS);
+    const outside = await deletedAt("rw-seven-out", Date.now() - 7.5 * DAY_MS);
+    const list = (await call("GET", "/admin/repos")).html;
+    expect(list).toMatch(/rw-seven-in<\/td><td class="muted">deleted \d{4}-\d\d-\d\d · can be restored for 1 more day<\/td>/);
+    expect(list).not.toContain(outside);
+    expect((await call("GET", `/admin/repos/${outside}`)).html).toContain("Deleted more than 7 days ago");
+    const refused = await call("POST", `/admin/repos/${outside}/restore`, {});
+    expect([refused.status, refused.html.includes("This repo was deleted more than 7 days ago and can&#39;t be restored.")]).toEqual([422, true]);
+    expect((await call("POST", `/admin/repos/${inside}/restore`, {})).status).toBe(303);
+    expect((await repos.findRepoById(env.DB, inside))!.deleted_at).toBeNull();
+  });
+
+  it("Restore 404s for unknown, never-created, live and purged repos; a purged repo's page 404s", async () => {
+    const live = await newRepo("rw-live");
+    const pending = await repos.insertRepo(env.DB, { name: "rw-pending", description: null }, Date.now());
+    const purged = await deletedAt("rw-gone", Date.now() - 40 * DAY_MS);
+    await markPurged(purged);
+    for (const id of ["no-such-id", live, pending.id, purged]) expect((await call("POST", `/admin/repos/${id}/restore`, {})).status, id).toBe(404);
+    expect((await call("GET", `/admin/repos/${purged}`)).status).toBe(404);
+    expect((await repos.findRepoById(env.DB, live))!.deleted_at).toBeNull();
+    expect((await repos.findRepoById(env.DB, pending.id))!.deleted_at).toBeNull();
+    expect((await repos.findRepoById(env.DB, purged))!.deleted_at).not.toBeNull();
   });
 });
 

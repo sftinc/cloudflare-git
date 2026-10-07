@@ -12,7 +12,7 @@ export const fmtDate = (sec: number) => new Date(sec * 1000).toISOString().slice
 export const fmtSize = (n: number) => (n < 1024 ? `${n} B` : n < 1_048_576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1_048_576).toFixed(1)} MB`);
 const fmtDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 const firstLine = (s: string) => s.split("\n", 1)[0];
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+export const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /** "3 days ago" style, from epoch ms. */
 export function fmtAgo(ms: number, now: number) {

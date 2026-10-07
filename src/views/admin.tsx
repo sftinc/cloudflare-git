@@ -2,7 +2,8 @@ import type { RepoRow } from "../db/repos";
 import type { InviteRow } from "../db/invites";
 import type { PushTokenRow } from "../db/tokens";
 import type { WebhookRow } from "../db/webhooks";
-import { fmtAgo, fmtDate, NO_REPOS_OWNER } from "./public";
+import { fmtAgo, fmtDate, NO_REPOS_OWNER, plural } from "./public";
+import { DAY_MS } from "../purge";
 import { repoHref } from "../render/paths";
 import { GitSetup } from "./git-setup";
 import { DESCRIPTION_MAX } from "../provision";
@@ -64,7 +65,7 @@ function VisibilitySelect(props: { private: boolean }) {
   );
 }
 
-export function AdminRepos(props: { repos: RepoRow[]; pending: Set<string> }) {
+export function AdminRepos(props: { repos: RepoRow[]; pending: Set<string>; restoreDays: number; now: number }) {
   const live = props.repos.filter((r) => r.deleted_at === null);
   const deleted = props.repos.filter((r) => r.deleted_at !== null);
   return (
@@ -103,7 +104,11 @@ export function AdminRepos(props: { repos: RepoRow[]; pending: Set<string> }) {
           <table class="list">
             <tbody>
               {deleted.map((r) => (
-                <tr><td>{r.name}</td><td class="muted">deleted {day(r.deleted_at!)}</td><td><Post action={`/admin/repos/${r.id}/restore`} label="Restore" /></td></tr>
+                <tr>
+                  <td>{r.name}</td>
+                  <td class="muted">{`deleted ${day(r.deleted_at!)} · can be restored for ${plural(Math.ceil((r.deleted_at! + props.restoreDays * DAY_MS - props.now) / DAY_MS), "more day")}`}</td>
+                  <td><Post action={`/admin/repos/${r.id}/restore`} label="Restore" /></td>
+                </tr>
               ))}
             </tbody>
           </table>
@@ -181,7 +186,7 @@ export const MAKE_PUBLIC_ACKS: [string, string][] = [
 ];
 
 export function AdminRepo(props: {
-  repo: RepoRow; status: "ready" | "pending" | "missing"; hooks: WebhookRow[]; now: number;
+  repo: RepoRow; status: "ready" | "pending" | "missing"; hooks: WebhookRow[]; now: number; restoreDays: number;
   secret?: { title: string; value: string }; error?: string; description?: string; name?: string; renamedUrl?: string; takeAlias?: string;
 }) {
   const r = props.repo;
@@ -267,10 +272,18 @@ export function AdminRepo(props: {
       <h2 class="section-title danger">Danger Zone</h2>
       <div class="box danger-zone">
         {r.deleted_at !== null ? (
-          <div class="row">
-            <div class="row-text"><strong>Restore this repo</strong><span>Bring it back with its webhooks and access.</span></div>
-            <Post action={`/admin/repos/${r.id}/restore`} label="Restore this repo" />
-          </div>
+          r.deleted_at > props.now - props.restoreDays * DAY_MS ? (
+            <div class="row">
+              <div class="row-text"><strong>Restore this repo</strong><span>Bring it back with its webhooks and access.</span></div>
+              <Post action={`/admin/repos/${r.id}/restore`} label="Restore this repo" />
+            </div>
+          ) : (
+            <p class="row muted">
+              {props.restoreDays === 0
+                ? "Deleted repos can't be restored: it will be permanently deleted soon."
+                : `Deleted more than ${plural(props.restoreDays, "day")} ago: it can't be restored and will be permanently deleted soon.`}
+            </p>
+          )
         ) : !live ? (
           props.status === "pending" ? (
             <p class="row muted">Still importing. Reload this page to check again.</p>

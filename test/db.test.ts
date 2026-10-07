@@ -26,7 +26,7 @@ describe("repos", () => {
     expect(await repos.findLiveRepo(db, "draft")).toBeNull();
     expect((await repos.findRepoByName(db, "draft"))?.deleted_at).toBe(T);
     expect((await repos.listLiveRepos(db)).map((x) => x.name)).not.toContain("draft");
-    expect((await repos.listReposForAdmin(db)).map((x) => x.name)).toContain("draft");
+    expect((await repos.listReposForAdmin(db, T - 1)).map((x) => x.name)).toContain("draft");
   });
   it("names stay reserved after delete", async () => {
     const r = await liveRepo("taken");
@@ -40,7 +40,7 @@ describe("repos", () => {
     await repos.markProvisioned(db, r.id, T);
     const row = (await repos.findRepoById(db, r.id))!;
     expect([row.name, row.deleted_at, row.provisioned_at]).toEqual([`~${r.id}`, T, null]);
-    expect((await repos.listReposForAdmin(db)).map((x) => x.id)).not.toContain(r.id);
+    expect((await repos.listReposForAdmin(db, 0)).map((x) => x.id)).not.toContain(r.id);
     expect((await repos.insertRepo(db, { name: "retire-me", description: null }, T)).name).toBe("retire-me");
   });
   it("retiring leaves a created repo alone", async () => {

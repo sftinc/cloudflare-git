@@ -57,9 +57,12 @@ export async function listLiveRepos(db: D1Database) {
   return results;
 }
 
-/** Every repo except never-created rows that were given up (retired). */
-export async function listReposForAdmin(db: D1Database) {
-  const { results } = await db.prepare("SELECT * FROM repos WHERE deleted_at IS NULL OR provisioned_at IS NOT NULL ORDER BY name").all<RepoRow>();
+/** Live and pending repos, and created repos deleted after restoreFrom (still restorable). Never retired or purged rows. */
+export async function listReposForAdmin(db: D1Database, restoreFrom: number) {
+  const { results } = await db
+    .prepare("SELECT * FROM repos WHERE deleted_at IS NULL OR (provisioned_at IS NOT NULL AND purged_at IS NULL AND deleted_at > ?) ORDER BY name")
+    .bind(restoreFrom)
+    .all<RepoRow>();
   return results;
 }
 
@@ -102,6 +105,15 @@ export async function setDescription(db: D1Database, id: string, description: st
 
 export async function setDeleted(db: D1Database, id: string, deleted: boolean, now: number) {
   await db.prepare("UPDATE repos SET deleted_at = ?1, updated_at = ?2 WHERE id = ?3").bind(deleted ? now : null, now, id).run();
+}
+
+/** Spec §5: one guarded update. Restores only a created, unpurged repo deleted after restoreFrom; returns whether it did. */
+export async function restoreRepo(db: D1Database, id: string, restoreFrom: number, now: number) {
+  const res = await db
+    .prepare("UPDATE repos SET deleted_at = NULL, updated_at = ?2 WHERE id = ?1 AND provisioned_at IS NOT NULL AND deleted_at > ?3 AND purged_at IS NULL")
+    .bind(id, now, restoreFrom)
+    .run();
+  return res.meta.changes > 0;
 }
 
 /**

@@ -2,13 +2,15 @@ import { Hono, type Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { AppEnv } from "../index";
 import { verifyAccessJwt } from "../auth/access-jwt";
-import { findAlias, findRepoById, findRepoByName, listLiveRepos, listReposForAdmin, renameRepo, retireRepo, setDeleted, setDescription, setPublic } from "../db/repos";
+import { findAlias, findRepoById, findRepoByName, listLiveRepos, listReposForAdmin, renameRepo, restoreRepo, retireRepo, setDeleted, setDescription, setPublic } from "../db/repos";
 import { createInvite, deleteInvite, inviteStatus, listInvites, revokeInvite } from "../db/invites";
 import { createPushToken, deletePushToken, listPushTokens, revokePushToken } from "../db/tokens";
 import { createWebhook, deleteWebhook, listWebhooks } from "../db/webhooks";
 import { randomSecret, sha256Hex } from "../lib/crypto";
 import { aliasWarning, DESCRIPTION_MAX, provisionRepo, refreshProvisioning, validateRepoName, type ProvisionInput, type ProvisionStatus } from "../provision";
 import { cloneUrl } from "../render/paths";
+import { DAY_MS, restoreDays } from "../purge";
+import { plural } from "../views/public";
 import { siteOrigin } from "../lib/site";
 import { page } from "../views/layout";
 import { ACCESS_LENGTHS, AdminInvites, AdminNewRepo, AdminRepo, AdminRepos, AdminTokens, MAKE_PUBLIC_ACKS, REDEEM_WINDOWS, type RepoFormValues } from "../views/admin";
@@ -69,7 +71,8 @@ function takeFlash(c: Context<AppEnv>, id: string): string | null {
 
 async function reposPage(c: Context<AppEnv>) {
   const now = Date.now();
-  const repos = await listReposForAdmin(c.env.DB);
+  const days = restoreDays(c.env);
+  const repos = await listReposForAdmin(c.env.DB, now - days * DAY_MS);
   const pending = new Set<string>();
   for (const r of repos) {
     if (r.deleted_at === null && r.provisioned_at === null) {
@@ -83,7 +86,7 @@ async function reposPage(c: Context<AppEnv>) {
       }
     }
   }
-  return admin(c, "Repos · admin", <AdminRepos repos={repos} pending={pending} />);
+  return admin(c, "Repos · admin", <AdminRepos repos={repos} pending={pending} restoreDays={days} now={now} />);
 }
 
 async function provision(c: Context<AppEnv>, input: ProvisionInput, values: RepoFormValues) {
@@ -114,14 +117,15 @@ adminRoutes.post("/import", async (c) => {
 
 async function repoPage(c: Context<AppEnv>, extra: { secret?: { title: string; value: string }; error?: string; description?: string; name?: string; takeAlias?: string } = {}, status = 200) {
   const repo = await findRepoById(c.env.DB, c.req.param("id")!);
-  if (!repo || (repo.provisioned_at === null && repo.deleted_at !== null)) return c.notFound(); // retired: a failed create, given up
+  // Purged, or retired (a failed create, given up).
+  if (!repo || repo.purged_at !== null || (repo.provisioned_at === null && repo.deleted_at !== null)) return c.notFound();
   let s: ProvisionStatus = "ready";
   if (repo.provisioned_at === null && repo.deleted_at === null) {
     s = await refreshProvisioning(c.env.DB, c.env.ARTIFACTS, repo, Date.now());
     if (s === "ready") repo.provisioned_at = Date.now();
   }
   const hooks = await listWebhooks(c.env.DB, repo.id);
-  return admin(c, `${repo.name} · admin`, <AdminRepo repo={repo} status={s} hooks={hooks} now={Date.now()} renamedUrl={c.req.query("renamed") ? cloneUrl(siteOrigin(c), repo.name) : undefined} {...extra} />, status);
+  return admin(c, `${repo.name} · admin`, <AdminRepo repo={repo} status={s} hooks={hooks} now={Date.now()} restoreDays={restoreDays(c.env)} renamedUrl={c.req.query("renamed") ? cloneUrl(siteOrigin(c), repo.name) : undefined} {...extra} />, status);
 }
 
 adminRoutes.get("/repos/:id", (c) => repoPage(c));
@@ -193,11 +197,16 @@ adminRoutes.post("/repos/:id/delete", async (c) => {
   return c.redirect("/admin/repos", 303);
 });
 
+/** Spec §5: 404 unless a created repo is deleted and not purged; 422 once its restore window is over. */
 adminRoutes.post("/repos/:id/restore", async (c) => {
-  const repo = await findRepoById(c.env.DB, c.req.param("id"));
-  if (!repo || repo.deleted_at === null || repo.provisioned_at === null) return c.notFound(); // retired rows can't come back
-  await setDeleted(c.env.DB, repo.id, false, Date.now());
-  return c.redirect(`/admin/repos/${repo.id}`, 303);
+  const id = c.req.param("id");
+  const days = restoreDays(c.env);
+  const now = Date.now();
+  if (await restoreRepo(c.env.DB, id, now - days * DAY_MS, now)) return c.redirect(`/admin/repos/${id}`, 303);
+  const repo = await findRepoById(c.env.DB, id);
+  if (!repo || repo.deleted_at === null || repo.provisioned_at === null || repo.purged_at !== null) return c.notFound();
+  const error = days === 0 ? "Deleted repos can't be restored." : `This repo was deleted more than ${plural(days, "day")} ago and can't be restored.`;
+  return repoPage(c, { error }, 422);
 });
 
 /** Spec §2: an import that failed in the background. Checks again first: it may have finished meanwhile. */
