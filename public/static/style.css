@@ -203,6 +203,10 @@ a.entry:hover { text-decoration: none; background: var(--code-bg); color: var(--
 .code-lines { display: grid; grid-template-columns: auto minmax(0, 1fr); background: var(--surface); }
 .code-lines .ln { padding: 16px 12px 16px 16px; font: 13px/1.5 var(--mono); text-align: right; white-space: pre; color: var(--muted); user-select: none; border-right: 1px solid var(--border); }
 .code-lines pre.code { background: var(--surface); }
+.empty-head { padding: 16px; background: var(--code-bg); border-bottom: 1px solid var(--border); }
+.empty-head h2 { display: flex; align-items: center; gap: 8px; font-size: 18px; margin: 0 0 4px; }
+.empty-head .icon { width: 20px; height: 20px; color: var(--accent); }
+.empty-head p { margin: 0; font-size: 14px; }
 .notice { background: var(--notice); padding: 10px 16px; margin: 0; border-bottom: 1px solid var(--border); }
 pre.code { margin: 0; padding: 16px; overflow-x: auto; background: var(--code-bg); line-height: 1.5; }
 .card pre.code { border-radius: 0; }

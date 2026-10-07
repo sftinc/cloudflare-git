@@ -166,7 +166,10 @@ export function EmptyRepo(props: { repo: RepoRow; head: string | null; info: Art
       <div class="repo-layout">
         <div class="repo-main">
           <section class="card">
-            <h2>This repo is empty</h2>
+            <div class="empty-head">
+              <h2><Book /> This repo is empty</h2>
+              <p class="muted">Push your first commit to see its files here.</p>
+            </div>
             <h3>Create a new repository on the command line</h3>
             <pre class="code"><code>{`echo "# ${repo.name}" >> README.md\ngit init\ngit add README.md\ngit commit -m "first commit"\ngit branch -M main\ngit remote add origin ${cloneUrl}\ngit push -u origin main`}</code></pre>
             <h3>…or push an existing repository from the command line</h3>
