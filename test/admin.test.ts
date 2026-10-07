@@ -37,7 +37,7 @@ async function call(method: string, path: string, form?: Record<string, string |
     headers: { "cf-access-jwt-assertion": jwt, Origin: "https://git.test", ...(form ? { "Content-Type": "application/x-www-form-urlencoded" } : {}), ...headers },
     body: form ? body : undefined,
   }, await ownerEnv({ ARTIFACTS: fake, ...extraEnv }));
-  return { status: res.status, location: res.headers.get("location"), html: await res.text(), cookie: res.headers.get("set-cookie") };
+  return { status: res.status, location: res.headers.get("location"), html: await res.text(), cookie: res.headers.get("set-cookie"), cookies: res.headers.getSetCookie() };
 }
 
 /** Follows a create's redirect the way a browser does, sending back the flash cookie it set. */
@@ -382,6 +382,9 @@ describe("rename", () => {
     expect((await repos.findRepoById(env.DB, other))!.name).toBe("ren-t2");
     expect(await aliases(id, other, gone)).toEqual([]);
   });
+  it("404s for an unknown repo before checking the name", async () => {
+    expect((await rename("no-such-id", "Bad Name")).status).toBe(404);
+  });
   it("404s for a deleted repo", async () => {
     const id = await newRepo("ren-del");
     await call("POST", `/admin/repos/${id}/delete`, DELETE_FORM);
@@ -465,7 +468,9 @@ describe("taking another repo's old name", () => {
     const d = await newRepo("ta-i");
     await rename(d, "ta-i2");
     const imp = { name: "ta-i", url: "https://github.com/a/b" };
-    expect((await call("POST", "/admin/import", imp)).html).toContain(WARNING("ta-i", "ta-i2"));
+    const importWarned = await call("POST", "/admin/import", imp);
+    expect(importWarned.status).toBe(422);
+    expect(importWarned.html).toContain(WARNING("ta-i", "ta-i2"));
     expect((await call("POST", "/admin/import", { ...imp, take_alias: d })).status).toBe(303);
     expect(await repos.findLiveAlias(env.DB, "ta-i")).toBeNull(); // and "ta-i" is a 404 until the import is ready
   });
@@ -504,6 +509,21 @@ describe("taking another repo's old name", () => {
     expect((await repos.findLiveAlias(env.DB, "ta-g"))!.id).toBe(a);
     expect((await call("POST", "/admin/repos", { name: "ta-free", take_alias: a })).status).toBe(303); // no old name to take: just creates
     expect((await repos.findLiveAlias(env.DB, "ta-g"))!.id).toBe(a);
+  });
+  it("warns when the old name appears between the check and the rename", async () => {
+    const a = await newRepo("ta-m");
+    const b = await newRepo("ta-mb");
+    const batch = env.DB.batch.bind(env.DB);
+    vi.spyOn(env.DB, "batch").mockImplementationOnce(async (stmts) => {
+      // meanwhile, "ta-m2" becomes an old name of ta-m
+      await env.DB.prepare("INSERT INTO repo_aliases (id, repo_id, name, created_at) VALUES ('al-ta-m2', ?, 'ta-m2', 1)").bind(a).run();
+      return batch(stmts);
+    });
+    const r = await rename(b, "ta-m2");
+    expect(r.status).toBe(422);
+    expect(r.html).toContain(WARNING("ta-m2", "ta-m"));
+    expect(r.html).toContain(`name="take_alias" value="${a}"`);
+    expect((await repos.findRepoById(env.DB, b))!.name).toBe("ta-mb");
   });
   it("renaming onto a pending import's name says so", async () => {
     const id = await newRepo("ta-r");
@@ -622,7 +642,10 @@ describe("refreshing after a create", () => {
     const a = await call("POST", "/admin/invites", { label: "rf-a", all: "1", redeem: "24h", access: "never" });
     const b = await call("POST", "/admin/invites", { label: "rf-b", all: "1", redeem: "24h", access: "never" });
     const both = [a.cookie!, b.cookie!].map((c) => c.split(";")[0]).join("; ");
-    const linkB = secretOf((await call("GET", b.location!, undefined, { cookie: both })).html)!;
+    const getB = await call("GET", b.location!, undefined, { cookie: both });
+    expect(getB.cookies).toHaveLength(1);
+    expect(getB.cookies[0]).toMatch(new RegExp(`^admin_flash_${b.location!.split("flash=")[1]}=;`));
+    const linkB = secretOf(getB.html)!;
     const linkA = secretOf((await call("GET", a.location!, undefined, { cookie: both })).html)!;
     const list = await invites.listInvites(env.DB);
     expect(list.find((i) => i.label === "rf-a")!.code_hash).toBe(await sha256Hex(linkA.split("/").pop()!));
@@ -663,7 +686,7 @@ describe("confirming delete and make-public", () => {
     await call("POST", `/admin/repos/${id}/visibility`, MAKE_PUBLIC_FORM);
     const pub = (await call("GET", `/admin/repos/${id}`)).html;
     expect(pub).not.toContain('<dialog id="make-public"'); // making private stays one click
-    expect(pub).toContain('value="0"');
+    expect(pub).toContain(`<form method="post" action="/admin/repos/${id}/visibility"><input type="hidden" name="public" value="0"/>`);
   });
   it("delete needs confirm=DELETE exactly", async () => {
     const id = await newRepo("cf-del");
@@ -826,12 +849,14 @@ describe("restore window", () => {
     expect((await repos.findRepoById(env.DB, inside))!.deleted_at).toBeNull();
   });
 
-  it("Restore 404s for unknown, never-created, live and purged repos; a purged repo's page 404s", async () => {
+  it("Restore 404s for unknown, never-created, retired, live and purged repos; a purged repo's page 404s", async () => {
     const live = await newRepo("rw-live");
     const pending = await repos.insertRepo(env.DB, { name: "rw-pending", description: null }, Date.now());
+    const retired = await repos.insertRepo(env.DB, { name: "rw-retired", description: null }, Date.now());
+    await repos.retireRepo(env.DB, retired.id, Date.now()); // a failed create, named ~<id>
     const purged = await deletedAt("rw-gone", Date.now() - 40 * DAY_MS);
     await markPurged(purged);
-    for (const id of ["no-such-id", live, pending.id, purged]) expect((await call("POST", `/admin/repos/${id}/restore`, {})).status, id).toBe(404);
+    for (const id of ["no-such-id", live, pending.id, retired.id, purged]) expect((await call("POST", `/admin/repos/${id}/restore`, {})).status, id).toBe(404);
     expect((await call("GET", `/admin/repos/${purged}`)).status).toBe(404);
     expect((await repos.findRepoById(env.DB, live))!.deleted_at).toBeNull();
     expect((await repos.findRepoById(env.DB, pending.id))!.deleted_at).toBeNull();

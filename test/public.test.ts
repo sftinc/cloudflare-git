@@ -94,7 +94,8 @@ const e = () => makeEnv({ ARTIFACTS: fake as unknown as Artifacts });
 const e2 = (vars: Record<string, string>) => makeEnv({ ARTIFACTS: fake as unknown as Artifacts, ...vars });
 const html = async (path: string, env = e(), headers: Record<string, string> = {}) => {
   const { res } = await request(path, { headers }, env);
-  return { status: res.status, body: await res.text(), headers: res.headers };
+  // Decoded by hand: res.text() warns on binary content types (images, downloads).
+  return { status: res.status, body: new TextDecoder().decode(await res.arrayBuffer()), headers: res.headers };
 };
 
 describe("home", () => {

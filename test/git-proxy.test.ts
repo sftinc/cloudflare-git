@@ -11,6 +11,9 @@ import { FakeArtifacts } from "./helpers/fake-artifacts";
 import { makeEnv, request } from "./helpers/env";
 import { stubFetch } from "./helpers/git-http";
 
+/** A git response body as text; res.text() warns on its binary content type. */
+const bodyText = async (res: Response) => new TextDecoder().decode(await res.arrayBuffer());
+
 const A = "a".repeat(40), B = "b".repeat(40);
 const enc = new TextEncoder();
 const auth = (pw: string) => ({ Authorization: `Basic ${btoa(`x:${pw}`)}` });
@@ -105,7 +108,7 @@ describe("forwarding", () => {
       headers: { "Content-Type": "application/x-git-upload-pack-request", "Git-Protocol": "version=2" },
       body: "0000",
     }, e());
-    expect(await res.text()).toBe("PACKDATA");
+    expect(await bodyText(res)).toBe("PACKDATA");
     expect(res.headers.get("content-type")).toBe("application/x-git-upload-pack-result");
     const up = upstream.find((r) => r.url.endsWith("/git-upload-pack"))!;
     expect(up.url).toBe("https://fake.artifacts.test/git/ns/pub.git/git-upload-pack");
@@ -174,7 +177,7 @@ describe("push", () => {
         headers: { ...auth("tok"), "Content-Type": "application/x-git-receive-pack-request", ...extra },
         body,
       }, e());
-      expect(await res.text()).toBe(want);
+      expect(await bodyText(res)).toBe(want);
       await done();
     }
   });
@@ -271,7 +274,7 @@ describe("old names", () => {
     await rename("pub", "pub2");
     await rename("priv", "priv2");
     const fetched = await request("/r/pub.git/git-upload-pack", { method: "POST", body: "0000" }, e());
-    expect(await fetched.res.text()).toBe("PACKDATA");
+    expect(await bodyText(fetched.res)).toBe("PACKDATA");
     expect(upstream.find((r) => r.url.endsWith("/git-upload-pack"))!.url).toBe("https://fake.artifacts.test/git/ns/pub.git/git-upload-pack");
     const { res } = await request("/r/priv.git/info/refs?service=git-upload-pack", { headers: auth("tok") }, e());
     expect(res.status).toBe(200);
@@ -341,6 +344,6 @@ describe("old names", () => {
     expect((await push("/r/priv.git/git-receive-pack", noBand)).text).toBe(plain);
     expect((await push("/r/priv.git/git-receive-pack", "\x1f\x8b-not-gzip", { "Content-Encoding": "gzip" })).text).toBe(plain);
     const fetched = await request("/r/priv.git/git-upload-pack", { method: "POST", headers: auth("tok"), body: "0000" }, e());
-    expect(await fetched.res.text()).toBe("PACKDATA");
+    expect(await bodyText(fetched.res)).toBe("PACKDATA");
   });
 });
