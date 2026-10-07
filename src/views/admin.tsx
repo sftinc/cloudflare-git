@@ -10,6 +10,7 @@ import { DESCRIPTION_MAX } from "../provision";
 import { Book, Copy, Download, Plus } from "./icons";
 
 const day = (ms: number) => fmtDate(Math.floor(ms / 1000));
+const dayTime = (ms: number) => new Date(ms).toISOString().slice(0, 16).replace("T", " ") + " UTC";
 
 /** "Last delivery: 200, 3 minutes ago"; any non-2xx result counts as failed. */
 function lastDelivery(h: WebhookRow, now: number) {
@@ -105,7 +106,7 @@ export function AdminRepos(props: { repos: RepoRow[]; pending: Set<string>; rest
             <tbody>
               {deleted.map((r) => (
                 <tr>
-                  <td>{r.name}</td>
+                  <td><a href={`/admin/repos/${r.id}`}>{r.name}</a></td>
                   <td class="muted">{`deleted ${day(r.deleted_at!)} · can be restored for ${plural(Math.ceil((r.deleted_at! + props.restoreDays * DAY_MS - props.now) / DAY_MS), "more day")}`}</td>
                   <td><Post action={`/admin/repos/${r.id}/restore`} label="Restore" /></td>
                 </tr>
@@ -395,7 +396,7 @@ export function AdminInvites(props: { invites: (InviteRow & { repo_names: string
                   <td>{i.label}</td>
                   <td>{i.all_repos_at !== null ? "All repositories" : i.repo_names || <span class="muted">none</span>}</td>
                   <td><span class={`badge ${i.status === "active" ? "ok" : i.status === "waiting" ? "warn" : "bad"}`}>{i.status}</span></td>
-                  <td class="muted">{i.redeemed_at === null ? `open by ${day(i.redeem_by_at)}` : i.access_expires_at === null ? "never" : day(i.access_expires_at)}</td>
+                  <td class="muted">{i.revoked_at !== null ? "" : i.redeemed_at === null ? `open by ${dayTime(i.redeem_by_at)}` : i.access_expires_at === null ? "never" : day(i.access_expires_at)}</td>
                   <td class="actions">
                     {i.revoked_at === null && <Post action={`/admin/invites/${i.id}/revoke`} label="Revoke" />}
                     <Post action={`/admin/invites/${i.id}/delete`} label="Delete" class="danger" />

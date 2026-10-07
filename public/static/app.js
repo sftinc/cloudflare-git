@@ -1,3 +1,6 @@
+// The "renamed" banner shows once: drop ?renamed=1 so a reload doesn't bring it back.
+if (new URLSearchParams(location.search).has("renamed")) history.replaceState(null, "", location.pathname);
+
 // Copy buttons: <button data-copy="text">, or data-copy-url="url" to copy what the URL returns. No inline scripts (CSP).
 document.addEventListener("click", (event) => {
   const button = event.target.closest("[data-copy], [data-copy-url]");

@@ -157,6 +157,13 @@ describe("repos", () => {
     expect(page.html).toContain(`<details class="hook-secret"><summary>Show secret</summary><code>${hook.secret}</code>`);
     expect(secretOf(page.html)).toBeUndefined();
     expect((await call("POST", `/admin/repos/${id}/webhooks`, { url: "http://evil.test/hook" })).status).toBe(422);
+    expect((await call("POST", `/admin/repos/${id}/webhooks`, { url: "http://localhost:3000/hook" })).status).toBe(422);
+  });
+  it("allows an http://localhost webhook only when the site runs on localhost", async () => {
+    extraEnv = { SITE_ORIGIN: "http://localhost:8787" };
+    const dev = { Origin: "http://localhost:8787" };
+    const id = (await call("POST", "/admin/repos", { name: "hook-dev" }, dev)).location!.split("/").pop()!;
+    expect((await call("POST", `/admin/repos/${id}/webhooks`, { url: "http://127.0.0.1:3000/hook" }, dev)).status).toBe(303);
   });
   it("strips refs/heads/ from a webhook branch filter", async () => {
     const id = (await call("POST", "/admin/repos", { name: "hook-ref" })).location!.split("/").pop()!;
@@ -558,7 +565,15 @@ describe("invites and tokens", () => {
     const r = await follow(await call("POST", "/admin/invites", { label: "Sam", repos: [id], redeem: "24h", access: "never" }));
     expect(secretOf(r.html)).toMatch(/^https:\/\/git\.test\/invite\/[A-Za-z0-9_-]{43}$/);
     expect(r.html).toContain("waiting");
+    expect(r.html).toMatch(/open by \d{4}-\d\d-\d\d \d\d:\d\d UTC/);
     expect((await call("POST", "/admin/invites", { label: "", repos: [], redeem: "24h", access: "never" })).status).toBe(422);
+  });
+  it("a revoked invite shows no expiry", async () => {
+    const id = (await call("POST", "/admin/repos", { name: "inv-rev" })).location!.split("/").pop()!;
+    await call("POST", "/admin/invites", { label: "Rev", repos: [id], redeem: "24h", access: "never" });
+    const inviteId = /\/admin\/invites\/([^/]+)\/revoke/.exec((await call("GET", "/admin/invites")).html)![1];
+    await call("POST", `/admin/invites/${inviteId}/revoke`, {});
+    expect((await call("GET", "/admin/invites")).html).toMatch(/revoked<\/span><\/td><td class="muted"><\/td>/);
   });
   it("invites and tokens offer the same expiry options, with their own defaults", async () => {
     const opts = (html: string, name: string) => {
@@ -814,9 +829,9 @@ describe("restore window", () => {
     const purged = await deletedAt("rw-purged", Date.now() - 40 * DAY_MS);
     await markPurged(purged);
     const html = (await call("GET", "/admin/repos")).html;
-    expect(html).toMatch(/rw-now<\/td><td class="muted">deleted \d{4}-\d\d-\d\d · can be restored for 30 more days<\/td>/);
-    expect(html).toMatch(/rw-recent<\/td><td class="muted">deleted \d{4}-\d\d-\d\d · can be restored for 3 more days<\/td>/);
-    expect(html).toMatch(/rw-last<\/td><td class="muted">deleted \d{4}-\d\d-\d\d · can be restored for 1 more day<\/td>/);
+    expect(html).toMatch(/rw-now<\/a><\/td><td class="muted">deleted \d{4}-\d\d-\d\d · can be restored for 30 more days<\/td>/);
+    expect(html).toMatch(/rw-recent<\/a><\/td><td class="muted">deleted \d{4}-\d\d-\d\d · can be restored for 3 more days<\/td>/);
+    expect(html).toMatch(/rw-last<\/a><\/td><td class="muted">deleted \d{4}-\d\d-\d\d · can be restored for 1 more day<\/td>/);
     expect(html).not.toMatch(/(?<!\d)0 more days/);
     for (const id of [now, recent, last]) expect(html).toContain(`/admin/repos/${id}/restore`);
     expect(html).not.toContain("rw-expired");
@@ -857,7 +872,7 @@ describe("restore window", () => {
     const inside = await deletedAt("rw-seven-in", Date.now() - 6.5 * DAY_MS);
     const outside = await deletedAt("rw-seven-out", Date.now() - 7.5 * DAY_MS);
     const list = (await call("GET", "/admin/repos")).html;
-    expect(list).toMatch(/rw-seven-in<\/td><td class="muted">deleted \d{4}-\d\d-\d\d · can be restored for 1 more day<\/td>/);
+    expect(list).toMatch(/rw-seven-in<\/a><\/td><td class="muted">deleted \d{4}-\d\d-\d\d · can be restored for 1 more day<\/td>/);
     expect(list).not.toContain(outside);
     expect((await call("GET", `/admin/repos/${outside}`)).html).toContain("Deleted more than 7 days ago");
     const refused = await call("POST", `/admin/repos/${outside}/restore`, {});

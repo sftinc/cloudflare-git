@@ -172,6 +172,7 @@ export function EmptyRepo(props: { repo: RepoRow; cloneUrl: string }) {
 
 function About(props: { repo: RepoRow; branch: string; head: string | null; readmeName: string | null; info: ArtifactsRepoInfo; cloneUrl: string; now: number }) {
   const { repo, info } = props;
+  const source = info.source?.replace(/^git:/, ""); // imports report "git:https://…"
   return (
     <aside class="about">
       <h2>About</h2>
@@ -186,7 +187,7 @@ function About(props: { repo: RepoRow; branch: string; head: string | null; read
         {props.head && <li><Branch /><span>Default branch <strong>{props.head}</strong></span></li>}
         {info.lastPushAt && <li><Upload /><span>Pushed <strong>{fmtAgo(Date.parse(info.lastPushAt), props.now)}</strong></span></li>}
         <li><Clock /><span>Created <strong>{fmtDay(repo.created_at)}</strong></span></li>
-        {info.source && <li><Download /><span>Imported from <strong>{info.source}</strong></span></li>}
+        {source && <li><Download /><span>Imported from <strong>{/^https?:\/\//.test(source) ? <a href={source} rel="nofollow noopener">{source}</a> : source}</strong></span></li>}
       </ul>
     </aside>
   );

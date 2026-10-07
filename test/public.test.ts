@@ -30,7 +30,7 @@ beforeEach(async () => {
     defaultBranch: "main",
     tags: ["v1.0.0"],
     lastPushAt: new Date(Date.now() - 3 * 86_400_000).toISOString(),
-    source: "github:acme/site",
+    source: "git:https://github.com/acme/site",
     branches: {
       main: {
         files: {
@@ -171,7 +171,7 @@ describe("repo pages", () => {
     expect(about).toContain('href="/r/site/blob/main/README.md"');
     expect(about).toContain("Default branch <strong>main</strong>");
     expect(about).toContain("Pushed <strong>3 days ago</strong>");
-    expect(about).toContain("Imported from <strong>github:acme/site</strong>");
+    expect(about).toContain('Imported from <strong><a href="https://github.com/acme/site" rel="nofollow noopener">https://github.com/acme/site</a></strong>');
     expect(body).toContain('href="/r/site/commits/main"');
   });
   it("leaves out About rows it has nothing for, and About on subfolders", async () => {

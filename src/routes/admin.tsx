@@ -236,15 +236,16 @@ adminRoutes.post("/repos/:id/discard", async (c) => {
   return c.redirect("/admin/repos", 303);
 });
 
-function webhookUrlError(raw: string): string | null {
+// http://localhost is allowed only while the site itself runs on localhost (local dev).
+function webhookUrlError(raw: string, site: string): string | null {
   let u: URL;
   try {
     u = new URL(raw);
   } catch {
     return "Enter a full URL.";
   }
-  const local = u.hostname === "localhost" || u.hostname === "127.0.0.1";
-  if (u.protocol !== "https:" && !(u.protocol === "http:" && local)) return "Webhook URLs must use https://.";
+  const local = (host: string) => host === "localhost" || host === "127.0.0.1";
+  if (u.protocol !== "https:" && !(u.protocol === "http:" && local(u.hostname) && local(new URL(site).hostname))) return "Webhook URLs must use https://.";
   return null;
 }
 
@@ -253,7 +254,7 @@ adminRoutes.post("/repos/:id/webhooks", async (c) => {
   if (!repo) return c.notFound();
   const b = await c.req.parseBody();
   const url = str(b.url);
-  const error = webhookUrlError(url);
+  const error = webhookUrlError(url, siteOrigin(c));
   if (error) return repoPage(c, { error }, 422);
   const secret = randomSecret();
   await createWebhook(c.env.DB, { repoId: repo.id, url, branch: str(b.branch).replace(/^refs\/heads\//, "") || null, secret }, Date.now());
