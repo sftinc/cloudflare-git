@@ -190,6 +190,8 @@ describe("repo pages", () => {
     const { status, body } = await html("/r/empty");
     expect(status).toBe(200);
     expect(body).toContain("This repo is empty");
+    expect(body).toContain("git init");
+    expect(body).toContain('<aside class="about">');
   });
   it("branches with slashes and encoded paths work", async () => {
     expect((await html("/r/site/tree/feature/login")).body).toContain('href="/r/site/blob/feature/login/login.ts"');

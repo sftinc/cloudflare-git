@@ -93,7 +93,10 @@ publicRoutes.get("/", async (c) => {
 publicRoutes.get(`/r/:repo{${NAME}}`, async (c) => {
   const l = await load(c);
   if (l instanceof Response) return l;
-  if (l.branches.length === 0) return page(c, l.repo.name, <EmptyRepo repo={l.repo} cloneUrl={l.cloneUrl} />);
+  if (l.branches.length === 0) {
+    using h = await c.env.ARTIFACTS.get(l.repo.storage_name);
+    return page(c, l.repo.name, <EmptyRepo repo={l.repo} head={l.head} info={await h.info()} cloneUrl={l.cloneUrl} now={Date.now()} />);
+  }
   return renderTree(c, l, l.branches[0], ""); // listBranches sorts HEAD's branch first
 });
 

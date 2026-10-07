@@ -73,6 +73,7 @@ footer.site .wrap { display: flex; justify-content: space-between; gap: 12px; fl
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin: 16px 0; overflow: hidden; }
 .card > h2, .card > p, .card > form, .card > pre { margin-left: 16px; margin-right: 16px; }
 .card > h2 { font-size: 17px; margin-top: 16px; }
+.card > h3 { font-size: 14px; margin: 16px; }
 .card > form { margin-bottom: 16px; }
 .card > .actions, .card > .secret { margin-left: 16px; margin-right: 16px; }
 .card.markdown > * { margin-left: 0; margin-right: 0; }

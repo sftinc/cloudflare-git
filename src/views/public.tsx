@@ -158,16 +158,23 @@ function FileTree(props: { repo: string; branch: string; levels: ArtifactsTreeEn
   );
 }
 
-export function EmptyRepo(props: { repo: RepoRow; cloneUrl: string }) {
+export function EmptyRepo(props: { repo: RepoRow; head: string | null; info: ArtifactsRepoInfo; cloneUrl: string; now: number }) {
+  const { repo, cloneUrl } = props;
   return (
     <>
-      <RepoHeader repo={props.repo} />
-      <CloneBox url={props.cloneUrl} />
-      <section class="card">
-        <h2>This repo is empty</h2>
-        <p class="muted">Push an existing repository from the command line:</p>
-        <pre class="code"><code>{`git remote add origin ${props.cloneUrl}\ngit push -u origin main`}</code></pre>
-      </section>
+      <RepoHeader repo={repo} />
+      <div class="repo-layout">
+        <div class="repo-main">
+          <section class="card">
+            <h2>This repo is empty</h2>
+            <h3>Create a new repository on the command line</h3>
+            <pre class="code"><code>{`echo "# ${repo.name}" >> README.md\ngit init\ngit add README.md\ngit commit -m "first commit"\ngit branch -M main\ngit remote add origin ${cloneUrl}\ngit push -u origin main`}</code></pre>
+            <h3>…or push an existing repository from the command line</h3>
+            <pre class="code"><code>{`git remote add origin ${cloneUrl}\ngit branch -M main\ngit push -u origin main`}</code></pre>
+          </section>
+        </div>
+        <About repo={repo} branch="" head={props.head} readmeName={null} info={props.info} cloneUrl={cloneUrl} now={props.now} />
+      </div>
     </>
   );
 }
