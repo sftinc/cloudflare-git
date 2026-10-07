@@ -194,6 +194,7 @@ http.createServer((req, res) => {
 
 ## Limits
 
-- 100 MB per push through the site (use the direct push URL for more)
+- 100 MB per push through the site. A bigger push fails with `error: RPC failed; HTTP 413 curl 22 The requested URL returned error: 413`: push the branches one at a time (`git push origin <branch>`), or use the direct push URL
 - 1 GB per repo and 32 MB per file (Artifacts limits); files over ~20 MB can't be shown in the browser
 - HTTPS only: no SSH, no Git LFS
+- Push options (`git push -o`) are not supported
