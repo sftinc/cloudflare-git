@@ -266,7 +266,7 @@ export type Symlink = { target: string; href: string | null; missing: boolean };
 export function BlobView(props: {
   repo: RepoRow; branch: string; kind: Ref["kind"]; branches: Ref[]; tags: Ref[]; path: string; levels: ArtifactsTreeEntry[][]; size: number; lines: number;
   binary: boolean; truncated: boolean; html: string | null; markdown: boolean; showingSource: boolean; tooLarge: boolean; cloneUrl: string;
-  exec?: boolean; symlink?: Symlink | null; // unset for a file too large to read
+  exec?: boolean; symlink?: Symlink | null; image?: boolean; // unset for a file too large to read
 }) {
   const { repo, branch, path } = props;
   const base = blobHref(repo.name, branch, path);
@@ -307,6 +307,8 @@ export function BlobView(props: {
                   Symlink to {props.symlink.href ? <a href={props.symlink.href}><code>{props.symlink.target}</code></a> : <code>{props.symlink.target}</code>}
                   {props.symlink.missing && " (missing)"}
                 </p>
+              ) : props.image ? (
+                <img src={`${base}?raw`} alt={path.split("/").pop()} class="blob-image" />
               ) : props.binary ? (
                 <p class="notice">Binary file not shown. <a href={`${base}?raw`}>Download</a></p>
               ) : preview ? (

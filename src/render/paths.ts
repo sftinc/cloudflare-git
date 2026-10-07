@@ -33,6 +33,11 @@ export function resolveRelative(dir: string, target: string): string | null {
   return parts.join("/");
 }
 
+const IMAGE_TYPES = new Map([["png", "image/png"], ["jpg", "image/jpeg"], ["jpeg", "image/jpeg"], ["gif", "image/gif"], ["webp", "image/webp"]]);
+
+/** MIME type of a browser-safe image by file extension (SVG is not one: it can run script); null for anything else. */
+export const imageType = (filename: string): string | null => IMAGE_TYPES.get(/\.([a-z0-9]+)$/i.exec(filename)?.[1].toLowerCase() ?? "") ?? null;
+
 /** Every repo lives under /r/, so repo names never collide with app routes. */
 export const repoHref = (repo: string) => `/r/${repo}`;
 export const cloneUrl = (origin: string, repo: string) => `${origin}/r/${repo}.git`;

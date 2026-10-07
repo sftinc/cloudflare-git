@@ -5,7 +5,7 @@ import { canView, getViewer, visibleRepos } from "../auth/viewer";
 import { findLiveAlias, findLiveRepo, type RepoRow } from "../db/repos";
 import { highlightCode } from "../render/highlight";
 import { renderMarkdown } from "../render/markdown";
-import { blobHref, cloneUrl, decodePath, repoHref, resolveRelative, splitRefPath, treeHref } from "../render/paths";
+import { blobHref, cloneUrl, decodePath, imageType, repoHref, resolveRelative, splitRefPath, treeHref } from "../render/paths";
 import { siteOrigin } from "../lib/site";
 import { page } from "../views/layout";
 import { BlobView, Commits, EmptyRepo, Home, TOO_LARGE, TreeView, type Symlink } from "../views/public";
@@ -156,10 +156,12 @@ publicRoutes.get(`/r/:repo{${NAME}}/blob/*`, async (c) => {
   }
   if (!blob) return c.notFound();
   const binary = new Uint8Array(await blob.slice(0, 8192).arrayBuffer()).includes(0);
+  const image = entry.type === "symlink" ? null : imageType(filename); // a symlink shows as a symlink, whatever its name
 
   if (wantsRaw) {
     const headers: Record<string, string> = { "Content-Security-Policy": "default-src 'none'; sandbox" };
-    if (binary) {
+    if (image) headers["Content-Type"] = image;
+    else if (binary) {
       headers["Content-Type"] = "application/octet-stream";
       headers["Content-Disposition"] = `attachment; filename="${filename.replace(/[^\x20-\x7e]|["\\]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
     } else headers["Content-Type"] = "text/plain; charset=utf-8";
@@ -180,7 +182,7 @@ publicRoutes.get(`/r/:repo{${NAME}}/blob/*`, async (c) => {
     c,
     `${filename} · ${l.repo.name}`,
     <BlobView repo={l.repo} branch={at.ref.name} kind={at.ref.kind} branches={l.branches} tags={l.tags} path={at.path} levels={levels} size={blob.size} lines={lines}
-      binary={binary} truncated={!binary && blob.size > MAX_VIEW_BYTES} html={html} markdown={markdown} showingSource={showingSource} tooLarge={false} cloneUrl={l.cloneUrl} exec={entry.type === "exec"} symlink={symlink} />,
+      binary={binary} truncated={!binary && blob.size > MAX_VIEW_BYTES} html={html} markdown={markdown} showingSource={showingSource} tooLarge={false} cloneUrl={l.cloneUrl} exec={entry.type === "exec"} symlink={symlink} image={image !== null} />,
     200,
     { wide: true },
   );

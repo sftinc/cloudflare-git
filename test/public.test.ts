@@ -8,10 +8,11 @@ import { makeEnv, request } from "./helpers/env";
 import { stubArtifactsGit } from "./helpers/git-http";
 import { ownerEnv, ownerToken } from "./helpers/jwt";
 
-const SYMLINKS = ["docs/up-link", "link-in", "link-dir", "link-slash", "link-up", "link-abs", "link-gone"];
+const SYMLINKS = ["docs/up-link", "link-in", "link-dir", "link-slash", "link-up", "link-abs", "link-gone", "logo.png"];
 
 let fake: FakeArtifacts;
 const big = "x".repeat(1_100_000);
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0, 1, 2]);
 
 async function addRepo(name: string, isPublic: boolean) {
   const r = await repos.insertRepo(env.DB, { name, description: `${name} description` }, 1);
@@ -62,6 +63,11 @@ beforeEach(async () => {
           "link-up": "../outside",
           "link-abs": "/etc/passwd",
           "link-gone": "docs/nope.md",
+          "docs/shot.png": PNG,
+          "docs/UP.PNG": PNG,
+          "docs/logo.svg": '<svg xmlns="http://www.w3.org/2000/svg"/>',
+          "docs/guide.md": "![shot](shot.png) ![up](../../escape.png) ![ext](https://example.com/x.png) ![vec](logo.svg) ![q](shot.png?raw=true)",
+          "logo.png": "docs/shot.png", // a symlink named like an image
         },
         modes: { "bin/run.sh": "100755", ...Object.fromEntries(SYMLINKS.map((p) => [p, "120000"])) },
       },
@@ -238,11 +244,10 @@ describe("files", () => {
   it("highlights code", async () => {
     expect((await html("/r/site/blob/main/src/index.ts")).body).toContain("hljs-keyword");
   });
-  it("renders markdown with images as links, and shows source on request", async () => {
+  it("renders markdown images as <img>, and shows source on request", async () => {
     const md = await html("/r/site/blob/main/docs/guide.md");
     expect(md.body).toContain("<h2>Guide</h2>");
-    expect(md.body.split("<main")[1]).not.toContain("<img"); // the header logo is the only <img>
-    expect(md.body).toContain('href="/r/site/blob/main/docs/img/d.png"');
+    expect(md.body).toContain('<img src="/r/site/blob/main/docs/img/d.png?raw" alt="Diagram">');
     expect((await html("/r/site/blob/main/docs/guide.md?source=1")).body).toContain("## Guide");
   });
   it("raw text is text/plain and sandboxed", async () => {
@@ -448,5 +453,42 @@ describe("executables and symlinks", () => {
     const r = await html("/r/rich/blob/main/link-in?raw");
     expect(r.body).toBe("docs/index.md");
     expect(r.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+  });
+});
+
+describe("images", () => {
+  it.each(["docs/shot.png", "docs/UP.PNG"])("raw of %s is an image, sandboxed, not a download", async (path) => {
+    const r = await html(`/r/rich/blob/main/${path}?raw`);
+    expect(r.status).toBe(200);
+    expect(r.headers.get("content-type")).toBe("image/png");
+    expect(r.headers.get("content-disposition")).toBeNull();
+    expect(r.headers.get("content-security-policy")).toBe("default-src 'none'; sandbox");
+    expect(r.headers.get("x-content-type-options")).toBe("nosniff");
+  });
+  it("raw of a text SVG stays text/plain", async () => {
+    const r = await html("/r/rich/blob/main/docs/logo.svg?raw");
+    expect(r.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    expect(r.headers.get("content-disposition")).toBeNull();
+  });
+  it("the blob page of an image shows it", async () => {
+    const r = await html("/r/rich/blob/main/docs/shot.png");
+    expect(r.body).toContain('<img src="/r/rich/blob/main/docs/shot.png?raw" alt="shot.png" class="blob-image"');
+    expect(r.body).not.toContain("Binary file not shown");
+  });
+  it("a symlink named like an image is shown as a symlink, and its raw is the target text", async () => {
+    const r = await html("/r/rich/blob/main/logo.png");
+    expect(r.body).toContain("Symlink to ");
+    expect(r.body).not.toContain('class="blob-image"');
+    const raw = await html("/r/rich/blob/main/logo.png?raw");
+    expect(raw.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    expect(raw.body).toBe("docs/shot.png");
+  });
+  it("markdown images in a repo become <img>; the rest stay links", async () => {
+    const { body } = await html("/r/rich/blob/main/docs/guide.md");
+    expect(body).toContain('<img src="/r/rich/blob/main/docs/shot.png?raw" alt="shot">');
+    expect(body).toContain('<a class="md-image" href="#">[image: up]</a>');
+    expect(body).toContain('<a class="md-image" href="https://example.com/x.png">[image: ext]</a>');
+    expect(body).toContain('<a class="md-image" href="/r/rich/blob/main/docs/logo.svg">[image: vec]</a>');
+    expect(body).toContain("[image: q]");
   });
 });

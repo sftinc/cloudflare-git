@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderMarkdown } from "../src/render/markdown";
 import { highlightCode } from "../src/render/highlight";
-import { blobHref, decodePath, encodePath, resolveRelative, splitRefPath, treeHref } from "../src/render/paths";
+import { blobHref, decodePath, encodePath, imageType, resolveRelative, splitRefPath, treeHref } from "../src/render/paths";
 import type { Ref } from "../src/artifacts";
 
 const ctx = { repo: "site", branch: "feature/x", dir: "docs" };
@@ -24,11 +24,16 @@ describe("markdown", () => {
     expect(out).toContain('href="https://example.com"');
     expect(out).toContain('href="#anchor"');
   });
-  it("renders images as alt text plus a link, never <img>", () => {
-    const out = renderMarkdown("![Logo](img/logo.png)", ctx);
-    expect(out).not.toContain("<img");
-    expect(out).toContain('href="/r/site/blob/feature/x/docs/img/logo.png"');
-    expect(out).toContain("Logo");
+  it("renders a relative repo image as <img> of the raw file, and everything else as alt text plus a link", () => {
+    const out = renderMarkdown("![Logo](img/logo.png) ![Up](../../x.png) ![Ext](https://example.com/a.png) ![Vec](v.svg) ![Doc](notes.txt) ![Frag](a.png#top) ![Q](a.png?raw=true)", ctx);
+    expect(out).toContain('<img src="/r/site/blob/feature/x/docs/img/logo.png?raw" alt="Logo">');
+    expect(out).toContain('<a class="md-image" href="#">[image: Up]</a>'); // escapes the repo
+    expect(out).toContain('<a class="md-image" href="https://example.com/a.png">[image: Ext]</a>');
+    expect(out).toContain('<a class="md-image" href="/r/site/blob/feature/x/docs/v.svg">[image: Vec]</a>');
+    expect(out).toContain('<a class="md-image" href="/r/site/blob/feature/x/docs/notes.txt">[image: Doc]</a>');
+    expect(out).toContain('<img src="/r/site/blob/feature/x/docs/a.png?raw" alt="Frag">'); // the fragment is dropped
+    expect(out).toContain("[image: Q]"); // a query string makes it no image type: a link
+    expect(out.match(/<img /g)).toHaveLength(2);
   });
   it("aligns table columns with classes, not inline styles (CSP blocks style attributes)", () => {
     const out = renderMarkdown("| a | b | c |\n| :- | :-: | -: |\n| 1 | 2 | 3 |", ctx);
@@ -47,6 +52,14 @@ describe("highlight", () => {
 });
 
 describe("paths", () => {
+  it("knows the image types by extension, case-insensitively", () => {
+    expect(imageType("a.png")).toBe("image/png");
+    expect(imageType("A.JPG")).toBe("image/jpeg");
+    expect(imageType("a.jpeg")).toBe("image/jpeg");
+    expect(imageType("dir.x/a.GIF")).toBe("image/gif");
+    expect(imageType("a.webp")).toBe("image/webp");
+    for (const name of ["a.svg", "png", "a.png.txt", "x.constructor", "x.toString", ""]) expect(imageType(name)).toBeNull();
+  });
   it("encodes each segment", () => {
     expect(encodePath("docs/my file #1?.md")).toBe("docs/my%20file%20%231%3F.md");
     expect(blobHref("site", "feature/x", "a b.txt")).toBe("/r/site/blob/feature/x/a%20b.txt");

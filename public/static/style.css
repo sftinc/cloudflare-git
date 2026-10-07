@@ -211,6 +211,8 @@ section.card pre.code { margin: 0 16px 16px; border-radius: 8px; }
 .markdown .align-left { text-align: left; } .markdown .align-center { text-align: center; } .markdown .align-right { text-align: right; }
 .markdown blockquote { margin: 0; padding: 0 16px; color: var(--muted); border-left: 3px solid var(--border); }
 .md-image { display: inline-block; font-size: 13px; background: var(--badge-bg); border: 1px dashed var(--border); border-radius: 6px; padding: 2px 8px; }
+.markdown img { max-width: 100%; height: auto; }
+.blob-image { display: block; max-width: 100%; height: auto; box-sizing: border-box; padding: 16px; }
 
 .commit-day { display: flex; align-items: center; gap: 8px; margin: 20px 0 8px; font-size: 14px; color: var(--muted); }
 .repo-title-row + .commit-day { margin-top: 0; }

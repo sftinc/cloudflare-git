@@ -588,10 +588,10 @@ async function main() {
   check("imported repo shows its default branch (master)", impHtml.includes("Default branch <strong>master</strong>"));
 
   // 13. Raw safety
-  const rawPng = await fetch(`${ORIGIN}/r/${NAMES.pub}/blob/main/docs/arch.png?raw=1`);
+  const rawPng = await fetch(`${ORIGIN}/r/${NAMES.pub}/blob/main/docs/arch.png?raw`);
   check(
-    "binary raw is a download",
-    rawPng.headers.get("content-type") === "application/octet-stream" && (rawPng.headers.get("content-disposition") ?? "").startsWith("attachment"),
+    "image raw is served as an image, not a download",
+    rawPng.headers.get("content-type") === "image/png" && !rawPng.headers.get("content-disposition"),
     `${rawPng.headers.get("content-type")} / ${rawPng.headers.get("content-disposition")}`,
   );
   const rawMd = await fetch(`${ORIGIN}/r/${NAMES.pub}/blob/main/README.md?raw=1`);

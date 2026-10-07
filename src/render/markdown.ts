@@ -1,5 +1,5 @@
 import MarkdownIt from "markdown-it";
-import { blobHref, resolveRelative } from "./paths";
+import { blobHref, imageType, resolveRelative } from "./paths";
 
 export type MdContext = { repo: string; branch: string; dir: string };
 
@@ -47,11 +47,17 @@ md.renderer.rules.link_open = (tokens, idx, opts, env, self) => {
   return self.renderToken(tokens, idx, opts);
 };
 
-// Spec §9: no embedded images in v1 — alt text plus a link to the file.
+// A relative image that resolves inside the repo becomes an <img> of its raw file (same origin, so private repos work);
+// anything else (external, SVG, escaping path, other types) is alt text plus a link.
 md.renderer.rules.image = (tokens, idx, opts, env, self) => {
   const t = tokens[idx];
+  const ctx = env as MdContext;
   const alt = self.renderInlineAsText(t.children ?? [], opts, env) || "image";
-  const href = rewrite(String(t.attrGet("src") ?? ""), env as MdContext);
+  const href = rewrite(String(t.attrGet("src") ?? ""), ctx);
+  const file = href.split("#")[0];
+  if (file.startsWith(blobHref(ctx.repo, ctx.branch, "")) && imageType(file)) {
+    return `<img src="${md.utils.escapeHtml(file)}?raw" alt="${md.utils.escapeHtml(alt)}">`;
+  }
   return `<a class="md-image" href="${md.utils.escapeHtml(href)}">[image: ${md.utils.escapeHtml(alt)}]</a>`;
 };
 
