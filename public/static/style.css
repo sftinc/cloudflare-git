@@ -250,6 +250,7 @@ table.list { width: 100%; border-collapse: collapse; }
 table.list th, table.list td { text-align: left; padding: 10px 16px; border-top: 1px solid var(--border); vertical-align: middle; }
 table.list th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); border-top: 0; background: var(--code-bg); }
 .table-scroll { overflow-x: auto; }
+.repo-list :is(th, td):not(:first-child) { width: 1%; white-space: nowrap; } /* name and description take the spare width */
 div.actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .actions form { margin: 0; display: inline-block; }
 table.list td.actions { white-space: nowrap; text-align: right; }
@@ -330,6 +331,7 @@ fieldset:has(input[name=all]:checked) label:has(input[name=repos]) { opacity: .4
   .site-actions .label, .theme-seg { display: none; }
   .site-actions .theme-cycle { display: inline-flex; }
   .settings-title { flex-wrap: wrap; }
+  .repo-list :is(th, td):nth-child(3) { display: none; } /* Created */
   .settings-head { flex-basis: 100%; max-width: 100%; }
   .settings-head > .badge { margin-left: auto; } /* lines up with the clone box below */
   .title-clone { flex-basis: 100%; max-width: none; margin-left: 0; } /* drops under the title, full width */

@@ -80,7 +80,7 @@ export function AdminRepos(props: { repos: RepoRow[]; pending: Set<string>; rest
         </section>
       ) : (
       <div class="card table-scroll">
-        <table class="list">
+        <table class="list repo-list">
           <thead><tr><th>Name</th><th>State</th><th>Created</th><th></th></tr></thead>
           <tbody>
             {live.map((r) => (
