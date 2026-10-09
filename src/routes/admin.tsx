@@ -131,7 +131,7 @@ async function repoPage(c: Context<AppEnv>, extra: { secret?: { title: string; v
     }
   }
   const hooks = await listWebhooks(c.env.DB, repo.id);
-  return admin(c, `${repo.name} · admin`, <AdminRepo repo={repo} status={s} hooks={hooks} now={Date.now()} restoreDays={restoreDays(c.env)} renamedUrl={c.req.query("renamed") !== undefined ? cloneUrl(siteOrigin(c), repo.name) : undefined} {...extra} />, status);
+  return admin(c, `${repo.name} · admin`, <AdminRepo repo={repo} status={s} hooks={hooks} now={Date.now()} restoreDays={restoreDays(c.env)} cloneUrl={cloneUrl(siteOrigin(c), repo.name)} renamed={c.req.query("renamed") !== undefined} {...extra} />, status);
 }
 
 adminRoutes.get("/repos/:id", (c) => repoPage(c));

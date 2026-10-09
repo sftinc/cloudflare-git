@@ -7,7 +7,7 @@ import { DAY_MS } from "../purge";
 import { repoHref } from "../render/paths";
 import { GitSetup } from "./git-setup";
 import { DESCRIPTION_MAX } from "../provision";
-import { Book, Copy, Download, Plus } from "./icons";
+import { Book, Copy, Download, Plus, Terminal } from "./icons";
 
 const day = (ms: number) => fmtDate(Math.floor(ms / 1000));
 const dayTime = (ms: number) => new Date(ms).toISOString().slice(0, 16).replace("T", " ") + " UTC";
@@ -188,7 +188,7 @@ export const MAKE_PUBLIC_ACKS: [string, string][] = [
 
 export function AdminRepo(props: {
   repo: RepoRow; status: "ready" | "pending" | "missing"; hooks: WebhookRow[]; now: number; restoreDays: number;
-  secret?: { title: string; value: string }; error?: string; description?: string; name?: string; renamedUrl?: string; takeAlias?: string;
+  secret?: { title: string; value: string }; error?: string; description?: string; name?: string; cloneUrl: string; renamed?: boolean; takeAlias?: string;
 }) {
   const r = props.repo;
   const description = props.description ?? r.description ?? "";
@@ -198,6 +198,13 @@ export function AdminRepo(props: {
       <h1 class="page-title settings-title">
         <Book /><a href="/admin/repos" class="crumb">Repos</a><span class="sep">/</span><span class="settings-name">{r.name}</span>
         {repoState(r, new Set(props.status === "pending" ? [r.id] : []))}
+        {live && (
+          <div class="clone title-clone">
+            <Terminal />
+            <code>{props.cloneUrl}</code>
+            <button type="button" class="btn" data-copy={props.cloneUrl} aria-label="Copy clone URL" title="Copy"><Copy /></button>
+          </div>
+        )}
       </h1>
       {props.error && (
         <div class="error">
@@ -207,12 +214,12 @@ export function AdminRepo(props: {
       {props.secret && <Secret title={props.secret.title} value={props.secret.value} />}
       {live && (
         <>
-          {props.renamedUrl && (
+          {props.renamed && (
             <div class="secret">
               <strong>Repository renamed.</strong> <span class="muted">Update your existing clones:</span>
               <div class="clone">
-                <code>git remote set-url origin {props.renamedUrl}</code>
-                <button type="button" class="btn" data-copy={`git remote set-url origin ${props.renamedUrl}`} aria-label="Copy command" title="Copy"><Copy /></button>
+                <code>git remote set-url origin {props.cloneUrl}</code>
+                <button type="button" class="btn" data-copy={`git remote set-url origin ${props.cloneUrl}`} aria-label="Copy command" title="Copy"><Copy /></button>
               </div>
             </div>
           )}

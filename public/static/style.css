@@ -280,6 +280,8 @@ fieldset:has(input[name=all]:checked) label:has(input[name=repos]) { opacity: .4
 .settings-title .crumb { color: var(--accent); font-weight: 400; }
 .settings-title .sep { color: var(--muted); font-weight: 400; }
 .settings-name { font-family: var(--mono); }
+.title-clone { margin: 0 0 0 auto; width: 480px; max-width: 100%; font-size: 14px; font-weight: 400; letter-spacing: 0; }
+.title-clone .icon { flex: none; width: 16px; height: 16px; }
 .section-title { font-size: 20px; margin: 36px 0 12px; }
 .section-title.danger { color: var(--bad); }
 .section-lead { margin: -4px 0 14px; color: var(--muted); font-size: 14px; }
