@@ -280,10 +280,7 @@ fieldset:has(input[name=all]:checked) label:has(input[name=repos]) { opacity: .4
 .settings-title .crumb { color: var(--accent); font-weight: 400; }
 .settings-title .sep { color: var(--muted); font-weight: 400; }
 .settings-name { font-family: var(--mono); }
-.settings-title { flex-wrap: nowrap; white-space: nowrap; }
-.settings-title > * { flex: none; }
-.settings-title .settings-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.settings-title > .title-clone { margin: 0 0 0 auto; flex: 0 100 480px; min-width: 96px; font-size: 14px; font-weight: 400; letter-spacing: 0; }
+.title-clone { margin: 0 0 0 auto; flex: 1 1 240px; min-width: 0; max-width: 480px; font-size: 14px; font-weight: 400; letter-spacing: 0; }
 .title-clone .icon, .title-clone .btn { flex: none; } .title-clone .icon { width: 16px; height: 16px; }
 .section-title { font-size: 20px; margin: 36px 0 12px; }
 .section-title.danger { color: var(--bad); }
