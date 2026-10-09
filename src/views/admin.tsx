@@ -85,7 +85,7 @@ export function AdminRepos(props: { repos: RepoRow[]; pending: Set<string>; rest
           <tbody>
             {live.map((r) => (
               <tr>
-                <td><a href={`/admin/repos/${r.id}`}><strong>{r.name}</strong></a>{r.description && <div class="muted">{r.description}</div>}</td>
+                <td><a href={`/admin/repos/${r.id}`}><strong>{r.name}</strong></a>{r.description && <div class="muted clamp-2" title={r.description}>{r.description}</div>}</td>
                 <td>{repoState(r, props.pending)}</td>
                 <td class="muted">{day(r.created_at)}</td>
                 <td>

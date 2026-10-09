@@ -250,6 +250,7 @@ table.list { width: 100%; border-collapse: collapse; }
 table.list th, table.list td { text-align: left; padding: 10px 16px; border-top: 1px solid var(--border); vertical-align: middle; }
 table.list th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); border-top: 0; background: var(--code-bg); }
 .table-scroll { overflow-x: auto; }
+.clamp-2 { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
 .repo-list :is(th, td):not(:first-child) { width: 1%; white-space: nowrap; } /* name and description take the spare width */
 div.actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .actions form { margin: 0; display: inline-block; }
