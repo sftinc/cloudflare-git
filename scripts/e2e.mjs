@@ -628,7 +628,7 @@ async function main() {
   check("a second accept is refused", (await fetch(link, { method: "POST", headers: { Origin: ORIGIN } })).status === 404);
 
   // 12. Import
-  const imp = await admin("POST", "/admin/import", { name: NAMES.imp, url: "https://github.com/octocat/Hello-World" });
+  const imp = await admin("POST", "/admin/import", { name: NAMES.imp, description: `E2E ${NAMES.imp}`, url: "https://github.com/octocat/Hello-World" });
   const impId = imp.status === 303 && imp.headers.get("location")?.match(/^\/admin\/repos\/([^/]+)$/)?.[1];
   if (impId) storageNames.add(impId);
   check("import accepted", !!impId, `status ${imp.status}`);
@@ -705,7 +705,7 @@ async function cleanup() {
   let names = new Set([...Object.values(NAMES), ...storageNames]);
   try {
     for (const r of JSON.parse(wrangler(["artifacts", "repos", "list", "--namespace", NAMESPACE, "--json"]))) {
-      if (r.name.startsWith("e2e-")) names.add(r.name);
+      if (r.description?.startsWith("E2E e2e-")) names.add(r.name); // storage names are ids; the e2e name is in the description
     }
   } catch (err) {
     console.warn(`could not list Artifacts repos: ${err.message}`);
