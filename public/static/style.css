@@ -311,6 +311,10 @@ fieldset:has(input[name=all]:checked) label:has(input[name=repos]) { opacity: .4
 .secret { background: var(--notice); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin: 16px 0; }
 .secret > code, .secret code.clone-url { display: block; overflow-x: auto; white-space: nowrap; padding: 8px 0; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 800px) {
+  .site-actions .btn:not(.primary) .label, .theme-seg { display: none; } /* icon-only theme and Log out before the header has to wrap */
+  .site-actions .theme-cycle { display: inline-flex; }
+}
 @media (max-width: 720px) {
   .grid-2, .repo-grid { grid-template-columns: 1fr; }
   .form-card { max-width: none; }
