@@ -280,8 +280,11 @@ fieldset:has(input[name=all]:checked) label:has(input[name=repos]) { opacity: .4
 .settings-title .crumb { color: var(--accent); font-weight: 400; }
 .settings-title .sep { color: var(--muted); font-weight: 400; }
 .settings-name { font-family: var(--mono); }
-.title-clone { margin: 0 0 0 auto; flex: 1 1 240px; min-width: 0; max-width: 480px; font-size: 14px; font-weight: 400; letter-spacing: 0; }
-.title-clone .icon, .title-clone .btn { flex: none; } .title-clone .icon { width: 16px; height: 16px; }
+.settings-title { flex-wrap: nowrap; } /* the clone box shrinks first; it drops to its own line only at the phone breakpoint */
+.settings-title > * { flex: none; }
+.settings-title > .settings-name { max-width: calc(100% - 320px); } /* only very long names wrap: leaves room for the crumb, badge and the smallest clone box */
+.settings-title > .title-clone { margin: 0 0 0 auto; flex: 0 1 480px; min-width: 96px; font-size: 14px; font-weight: 400; letter-spacing: 0; }
+.title-clone .icon, .title-clone .btn { flex: none; } .title-clone code { scrollbar-width: none; } .title-clone .icon { width: 16px; height: 16px; }
 .section-title { font-size: 20px; margin: 36px 0 12px; }
 .section-title.danger { color: var(--bad); }
 .section-lead { margin: -4px 0 14px; color: var(--muted); font-size: 14px; }
@@ -325,6 +328,8 @@ fieldset:has(input[name=all]:checked) label:has(input[name=repos]) { opacity: .4
   .site-actions .icon-btn { width: 44px; height: 44px; padding: 0; }
   .site-actions .label, .theme-seg { display: none; }
   .site-actions .theme-cycle { display: inline-flex; }
+  .settings-title { flex-wrap: wrap; }
+  .settings-title > .title-clone { flex: 1 1 100%; margin-left: 0; }
   .box > .row > form:last-child { flex-basis: 100%; }
   .box > .row > form:last-child button { width: 100%; }
   .box > .row > button[data-dialog] { flex-basis: 100%; }
