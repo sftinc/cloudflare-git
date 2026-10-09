@@ -332,7 +332,7 @@ fieldset:has(input[name=all]:checked) label:has(input[name=repos]) { opacity: .4
   .settings-title { flex-wrap: wrap; }
   .settings-head { flex-basis: 100%; max-width: 100%; }
   .settings-head > .badge { margin-left: auto; } /* lines up with the clone box below */
-  .title-clone { flex-basis: 100%; margin-left: 0; } /* drops under the title */
+  .title-clone { flex-basis: 100%; max-width: none; margin-left: 0; } /* drops under the title, full width */
   .box > .row > form:last-child { flex-basis: 100%; }
   .box > .row > form:last-child button { width: 100%; }
   .box > .row > button[data-dialog] { flex-basis: 100%; }
