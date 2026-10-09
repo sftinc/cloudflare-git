@@ -329,7 +329,7 @@ fieldset:has(input[name=all]:checked) label:has(input[name=repos]) { opacity: .4
   .site-actions .label, .theme-seg { display: none; }
   .site-actions .theme-cycle { display: inline-flex; }
   .settings-title { flex-wrap: wrap; }
-  .settings-title > .settings-name { max-width: 100%; }
+  .settings-title > .settings-name { max-width: calc(100% - 230px); } /* crumb, name and badge share one line; the clone box takes the next */
   .settings-title > .title-clone { flex: 1 1 100%; margin-left: 0; }
   .box > .row > form:last-child { flex-basis: 100%; }
   .box > .row > form:last-child button { width: 100%; }
