@@ -282,7 +282,7 @@ fieldset:has(input[name=all]:checked) label:has(input[name=repos]) { opacity: .4
 .settings-name { font-family: var(--mono); }
 .settings-title { flex-wrap: nowrap; } /* the clone box shrinks first; it drops to its own line only at the phone breakpoint */
 .settings-title > * { flex: none; }
-.settings-title > .settings-name { max-width: calc(100% - 320px); } /* only very long names wrap: leaves room for the crumb, badge and the smallest clone box */
+.settings-title > .settings-name { max-width: min(50%, calc(100% - 320px)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* long names get an ellipsis; leaves room for the crumb, badge and the smallest clone box */
 .settings-title > .title-clone { margin: 0 0 0 auto; flex: 0 1 480px; min-width: 96px; font-size: 14px; font-weight: 400; letter-spacing: 0; }
 .title-clone .icon, .title-clone .btn { flex: none; } .title-clone code { scrollbar-width: none; } .title-clone .icon { width: 16px; height: 16px; }
 .section-title { font-size: 20px; margin: 36px 0 12px; }
@@ -329,6 +329,7 @@ fieldset:has(input[name=all]:checked) label:has(input[name=repos]) { opacity: .4
   .site-actions .label, .theme-seg { display: none; }
   .site-actions .theme-cycle { display: inline-flex; }
   .settings-title { flex-wrap: wrap; }
+  .settings-title > .settings-name { max-width: 100%; }
   .settings-title > .title-clone { flex: 1 1 100%; margin-left: 0; }
   .box > .row > form:last-child { flex-basis: 100%; }
   .box > .row > form:last-child button { width: 100%; }
