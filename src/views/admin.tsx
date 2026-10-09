@@ -196,8 +196,10 @@ export function AdminRepo(props: {
   return (
     <>
       <h1 class="page-title settings-title">
-        <Book /><a href="/admin/repos" class="crumb">Repos</a><span class="sep">/</span><span class="settings-name" title={r.name}>{r.name}</span>
-        {repoState(r, new Set(props.status === "pending" ? [r.id] : []))}
+        <span class="settings-head">
+          <Book /><a href="/admin/repos" class="crumb">Repos</a><span class="sep">/</span><span class="settings-name" title={r.name}>{r.name}</span>
+          {repoState(r, new Set(props.status === "pending" ? [r.id] : []))}
+        </span>
         {live && (
           <div class="clone title-clone">
             <Terminal />

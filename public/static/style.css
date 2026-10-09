@@ -280,10 +280,11 @@ fieldset:has(input[name=all]:checked) label:has(input[name=repos]) { opacity: .4
 .settings-title .crumb { color: var(--accent); font-weight: 400; }
 .settings-title .sep { color: var(--muted); font-weight: 400; }
 .settings-name { font-family: var(--mono); }
-.settings-title { flex-wrap: nowrap; } /* the clone box shrinks first; it drops to its own line only at the phone breakpoint */
-.settings-title > * { flex: none; }
-.settings-title > .settings-name { max-width: min(50%, calc(100% - 320px)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* long names get an ellipsis; leaves room for the crumb, badge and the smallest clone box */
-.settings-title > .title-clone { margin: 0 0 0 auto; flex: 0 1 480px; min-width: 96px; font-size: 14px; font-weight: 400; letter-spacing: 0; }
+.settings-title { flex-wrap: nowrap; }
+.settings-head { flex: none; display: flex; align-items: center; gap: 10px; max-width: calc(100% - 240px); } /* one line; the name gets the ellipsis */
+.settings-head > * { flex: none; }
+.settings-head > .settings-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.title-clone { margin: 0 0 0 auto; flex: 0 1 480px; min-width: 96px; font-size: 14px; font-weight: 400; letter-spacing: 0; }
 .title-clone .icon, .title-clone .btn { flex: none; } .title-clone code { scrollbar-width: none; } .title-clone .icon { width: 16px; height: 16px; }
 .section-title { font-size: 20px; margin: 36px 0 12px; }
 .section-title.danger { color: var(--bad); }
@@ -328,10 +329,10 @@ fieldset:has(input[name=all]:checked) label:has(input[name=repos]) { opacity: .4
   .site-actions .icon-btn { width: 44px; height: 44px; padding: 0; }
   .site-actions .label, .theme-seg { display: none; }
   .site-actions .theme-cycle { display: inline-flex; }
-  .settings-title { display: grid; grid-template-columns: auto auto auto minmax(0, max-content) minmax(auto, 1fr); }
-  .settings-title > .badge { justify-self: start; white-space: nowrap; } /* icon, crumb, /, name (takes what's left), badge; the clone box gets its own row */
-  .settings-title > .settings-name { max-width: none; }
-  .settings-title > .title-clone { grid-column: 1 / -1; margin-left: 0; }
+  .settings-title { flex-wrap: wrap; }
+  .settings-head { flex-basis: 100%; max-width: 100%; }
+  .settings-head > .badge { margin-left: auto; } /* lines up with the clone box below */
+  .title-clone { flex-basis: 100%; margin-left: 0; } /* drops under the title */
   .box > .row > form:last-child { flex-basis: 100%; }
   .box > .row > form:last-child button { width: 100%; }
   .box > .row > button[data-dialog] { flex-basis: 100%; }
